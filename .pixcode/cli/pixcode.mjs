@@ -1,10 +1,22 @@
 #!/usr/bin/env node
-import { mkdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { installHostAdapter, listHostAdapters, refreshHostAdapters } from "./adapters/agents.mjs";
 import { parseOpenSpecJson, runOpenSpec } from "./adapters/openspec.mjs";
 import { doctor, validateSkills } from "./lib/checks.mjs";
+import {
+  validateModelArtifacts,
+  validateReviewDocument,
+} from "./lib/artifact-validation.mjs";
+import {
+  finalizeCapabilityPublication,
+  prepareCapabilityPublication,
+  rebuildCapabilityIndexes,
+  validateCapabilities,
+  validateCapabilityPublicationMap,
+} from "./lib/capabilities.mjs";
+import { installOpenSpecScaffold } from "./lib/scaffold.mjs";
 import {
   assertChangeId,
   exists,
@@ -22,6 +34,10 @@ const HELP = `PixCode 轻量 AI 工程驱动器
   pixcode change create <change-id> [--json]
   pixcode status [change] [--json]
   pixcode archive <change> [--yes] [--json]
+  pixcode capabilities prepare <archive> [--json]
+  pixcode capabilities finalize <archive> [--json]
+  pixcode capabilities reindex [--json]
+  pixcode capabilities validate [--json]
   pixcode adapters install <codex|claude|opencode>
   pixcode adapters refresh
   pixcode adapters list [--json]
@@ -64,14 +80,23 @@ async function validate(root, config, positional, flags) {
   });
   const target = positional[0];
   if (target) assertChangeId(target);
+  const modelChecks = await validateModelArtifacts(root, config, target);
   const validationArgs = target ? ["validate", target, "--strict"] : ["validate", "--all", "--strict"];
   const changes = await runOpenSpec(validationArgs, {
     cwd: root,
     expectedVersion: config.engine.version,
   });
+  const capabilities = await validateCapabilities(root, config);
   const result = {
-    ok: skillChecks.every((check) => check.ok) && schema.ok && changes.ok,
+    ok:
+      skillChecks.every((check) => check.ok) &&
+      modelChecks.every((check) => check.ok) &&
+      capabilities.ok &&
+      schema.ok &&
+      changes.ok,
     skills: skillChecks,
+    models: modelChecks,
+    capabilities,
     schema: { ok: schema.ok, stdout: schema.stdout, stderr: schema.stderr },
     changes: { ok: changes.ok, stdout: changes.stdout, stderr: changes.stderr },
   };
@@ -81,6 +106,18 @@ async function validate(root, config, positional, flags) {
     for (const check of skillChecks) {
       console.log(`${check.ok ? "✓" : "✗"} Skill ${check.item}: ${check.detail}`);
     }
+    for (const check of modelChecks) {
+      console.log(
+        `${check.ok ? "✓" : "✗"} 模型字段 ${check.change}: ${
+          check.ok ? "有效" : check.errors.join("；")
+        }`,
+      );
+    }
+    console.log(
+      `${capabilities.ok ? "✓" : "✗"} 当前态功能资产: ${capabilities.count} 个 Capability${
+        capabilities.errors.length ? `；${capabilities.errors.join("；")}` : ""
+      }`,
+    );
     emitOpenSpec(schema, false);
     emitOpenSpec(changes, false);
   }
@@ -88,14 +125,7 @@ async function validate(root, config, positional, flags) {
 }
 
 async function init(root, config, flags) {
-  await mkdir(path.join(root, "openspec"), { recursive: true });
-  if (!(await exists(path.join(root, "openspec", "config.yaml")))) {
-    const initialized = await runOpenSpec(["init", root, "--tools", "none", "--force"], {
-      cwd: root,
-      expectedVersion: config.engine.version,
-    });
-    if (!initialized.ok) throw new Error(initialized.stderr || initialized.stdout);
-  }
+  const scaffold = await installOpenSpecScaffold(root, config);
   if (flags.agent && flags.agent !== "none") {
     await installHostAdapter(root, flags.agent, config.frameworkVersion);
   }
@@ -107,6 +137,7 @@ async function init(root, config, flags) {
   const result = {
     ...report,
     ok: report.ok && schema.ok,
+    scaffold,
     schema: { ok: schema.ok, stdout: schema.stdout, stderr: schema.stderr },
   };
   output(result, Boolean(flags.json));
@@ -120,7 +151,14 @@ async function archive(root, config, change, flags) {
     expectedVersion: config.engine.version,
   });
   const status = parseOpenSpecJson(statusResult);
+  const changeDirectory = path.join(root, "openspec", "changes", change);
+  const publicationMap = await validateCapabilityPublicationMap(
+    root,
+    config,
+    changeDirectory,
+  );
   const tasksPath = status.artifactPaths?.tasks?.existingOutputPaths?.[0];
+  const reviewPath = status.artifactPaths?.review?.existingOutputPaths?.[0];
   const verificationPath = status.artifactPaths?.verification?.existingOutputPaths?.[0];
   const blockers = [];
   if (!tasksPath) {
@@ -128,7 +166,14 @@ async function archive(root, config, change, flags) {
   } else {
     const tasks = await readFile(tasksPath, "utf8");
     const pending = tasks.match(/^- \[ \]/gm)?.length ?? 0;
-    if (pending > 0) blockers.push(`仍有 ${pending} 项任务未完成`);
+      if (pending > 0) blockers.push(`仍有 ${pending} 项任务未完成`);
+  }
+  if (!reviewPath) {
+    blockers.push("当前 Schema 定义的 review 资产尚未生成");
+  } else {
+    blockers.push(
+      ...validateReviewDocument(await readFile(reviewPath, "utf8")).errors,
+    );
   }
   if (!verificationPath) {
     blockers.push("当前 Schema 定义的 verification 资产尚未生成");
@@ -146,12 +191,40 @@ async function archive(root, config, change, flags) {
   if (!validation.ok) {
     throw new Error(validation.stderr || validation.stdout || "严格校验失败。");
   }
-  const args = ["archive", change, "--yes"];
-  if (flags.json) args.push("--json");
-  emitOpenSpec(
-    await runOpenSpec(args, { cwd: root, expectedVersion: config.engine.version }),
-    Boolean(flags.json),
-  );
+  const archived = await runOpenSpec(["archive", change, "--yes", "--json"], {
+    cwd: root,
+    expectedVersion: config.engine.version,
+  });
+  const archiveResult = parseOpenSpecJson(archived);
+  let publication;
+  try {
+    publication = await prepareCapabilityPublication(root, config, archiveResult.archivedAs);
+  } catch (error) {
+    throw new Error(
+      `OpenSpec 已归档为 ${archiveResult.archivedAs}，但 pix-specs 发布准备失败：${error.message}。修复后执行 pixcode capabilities prepare ${archiveResult.archivedAs}。`,
+    );
+  }
+  const result = {
+    ...archiveResult,
+    publication: {
+      status: "pending-agent-merge",
+      archiveMapping: publication.mapping,
+      capabilities: publicationMap.capabilities,
+      plans: publication.plans,
+      next: `pixcode capabilities finalize ${archiveResult.archivedAs}`,
+    },
+  };
+  if (flags.json) {
+    output(result, true);
+  } else {
+    console.log(`Change '${change}' 已由 OpenSpec 归档为 '${archiveResult.archivedAs}'。`);
+    console.log(`已准备 ${publication.plans.length} 个 pix-specs 功能资产合并计划。`);
+    for (const plan of publication.plans) {
+      console.log(`- ${plan.name}（${plan.id}）：${plan.directory}`);
+    }
+    console.log("请由 Agent 合并当前完整结论，然后执行：");
+    console.log(`npm run --silent pixcode -- capabilities finalize ${archiveResult.archivedAs}`);
+  }
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -218,6 +291,36 @@ export async function main(argv = process.argv.slice(2)) {
   if (command === "archive") {
     await archive(root, config, positional[0], flags);
     return;
+  }
+  if (command === "capabilities") {
+    const action = positional[0];
+    if (action === "prepare") {
+      output(
+        await prepareCapabilityPublication(root, config, positional[1]),
+        Boolean(flags.json),
+      );
+      return;
+    }
+    if (action === "finalize") {
+      output(
+        await finalizeCapabilityPublication(root, config, positional[1]),
+        Boolean(flags.json),
+      );
+      return;
+    }
+    if (["reindex", "rebuild"].includes(action)) {
+      output(
+        { ok: true, indexes: await rebuildCapabilityIndexes(root, config) },
+        Boolean(flags.json),
+      );
+      return;
+    }
+    if (action === "validate") {
+      const result = await validateCapabilities(root, config);
+      output(result, Boolean(flags.json));
+      if (!result.ok) process.exitCode = 1;
+      return;
+    }
   }
   if (command === "adapters") {
     const action = positional[0];

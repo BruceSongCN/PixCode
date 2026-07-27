@@ -1,0 +1,27 @@
+# PixCode 归档发布映射。OpenSpec 不读取本文件；PixCode 用它把归档结果发布为当前态功能规格。
+schema_version: 1
+
+capabilities:
+  - id: <module-id>-<feature-id>
+    name: <功能中文名>
+
+    # create：首次建立功能资产；update：更新已有功能资产。
+    action: create
+
+    # 支持任意层级中文目录。每一项必须是单个安全目录名，不得包含 / 或 \。
+    publication_path:
+      - <模块中文名>
+      - <功能中文名>
+
+    # 只列本轮需要合并的结论资产；未列出的已有资产保持不变。
+    # 可选值：requirements、solution、process、model、contracts、
+    # interaction、test-strategy、quality。
+    assets:
+      - requirements
+      - solution
+      - process
+      - model
+      - contracts
+      - interaction
+      - test-strategy
+      - quality

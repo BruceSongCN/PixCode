@@ -13,11 +13,18 @@
 │  ├─ adapters/
 │  ├─ lib/
 │  └─ tests/
+├─ scaffolds/                     # 初始化项目时生成的运行目录脚手架
+│  └─ openspec/
+│     ├─ config.yaml
+│     └─ schemas/pixcode-delivery/
 ├─ rules/                         # Agent 必须遵守的通用行为边界
 │  ├─ 直接任务与SPEC.md
 │  ├─ OpenSpec资产命名.md
+│  ├─ 当前态功能规格.md
 │  ├─ 多目标交付.md
 │  └─ 测试与证据.md
+├─ templates/                     # 归档后当前态功能规格模板
+│  └─ capability-baseline/
 └─ skills/                        # PixCode 公开工作流
    ├─ pixcode-workflow/           # 统一规格流程门面
    │  ├─ SKILL.md
@@ -33,7 +40,9 @@
 | --- | --- | --- |
 | `.pixcode/` | PixCode | 工具中立的通用 AI rules 和自定义 skills |
 | `.codex/` / `.claude/` / `.opencode/` | 宿主适配 | PixCode CLI 生成的可刷新 Skill 副本 |
-| `openspec/` | PixCode / OpenSpec | PixCode 管理、OpenSpec 执行的规格资产 |
+| `.pixcode/scaffolds/openspec/` | PixCode | OpenSpec 配置、Schema 和过程模板的框架事实源 |
+| `openspec/` | 当前项目 / OpenSpec | `pixcode init` 生成的项目配置、活动 Change、当前 Spec 和归档 |
+| `pix-specs/` | PixCode | 按中文多级目录组织的当前态功能规格 |
 | `src/` | 业务项目 | 各 Target 的代码、技术规则和测试实现 |
 
 `.pixcode` 是 PixCode 能力的唯一事实来源，不采用任何单一 Agent 宿主的发现目录作为核心目录。Codex、Claude Code 或其他宿主需要自动发现这些能力时，应通过各自的安装器或适配层进行映射；不得在仓库中复制一份长期并行维护的 rules 或 skills。
@@ -61,7 +70,14 @@ npm run --silent pixcode -- adapters install opencode
 - 能被多个项目复用；
 - 不与 OpenSpec 原生生命周期重复。
 
-项目专属构建命令、服务地址、账号、Target 清单和技术 Adapter 应留在对应项目安装层或代码仓库。模板和 SPEC 资产属于 `openspec/`，测试日志和截图属于 change 的证据目录。
+项目专属构建命令、服务地址、账号、Target 清单和技术 Adapter 应留在对应项目安装层或代码仓库。OpenSpec 过程模板的源码属于 `.pixcode/scaffolds/openspec/`，初始化后复制到项目 `openspec/` 供引擎执行；PixCode 当前态归档模板属于 `.pixcode/templates/`，生成的结论位于 `pix-specs/`，测试日志和截图属于 Change 的证据目录。
+
+纯 PixCode 框架源码不要求预置根目录 `openspec/`。执行 `pixcode init` 时：
+
+- 缺少 `openspec/config.yaml` 时从脚手架创建；
+- 已有项目配置时保留，不覆盖项目上下文和规则；
+- `openspec/schemas/pixcode-delivery/` 作为 PixCode 管理的运行副本刷新；
+- Change、Spec、归档和证据始终属于使用框架的项目。
 
 ## 扩展约定
 

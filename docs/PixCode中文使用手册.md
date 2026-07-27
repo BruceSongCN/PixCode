@@ -1,6 +1,6 @@
 # PixCode 中文使用手册
 
-> 当前版本：PixCode `0.1.0`  
+> 当前版本：PixCode `0.4.0`
 > 内置引擎：OpenSpec `1.6.0`  
 > 更新日期：2026-07-27
 
@@ -13,7 +13,7 @@ PixCode 是面向 AI 编程的轻量工程驱动框架。它把工作分成两�
 - 确定性工作：初始化、状态查询、结构校验、归档检查、Agent 宿主适配，由 `.pixcode/cli/` 中的脚本完成。
 - 语义性工作：需求澄清、规格编写、设计取舍、代码实现、测试推导，由 Agent 按 rules、skills、Schema 和项目代码完成。
 
-OpenSpec 作为 PixCode 的内部依赖，负责 change、delta spec、任务跟踪、当前事实和归档。用户只使用 PixCode，不需要全局安装或直接学习 OpenSpec 命令。
+OpenSpec 作为 PixCode 的内部依赖，负责 change、delta spec、任务跟踪、当前需求事实和归档。PixCode 在归档后把有效结论合并发布到根目录 `pix-specs/`，形成便于评审、协作和交接的当前完整功能规格。用户只使用 PixCode，不需要全局安装或直接学习 OpenSpec 命令。
 
 ## 2. 安装
 
@@ -40,12 +40,10 @@ Test-Path node_modules
 
 ```powershell
 npm ci
-npm run --silent pixcode -- doctor
-npm test
-npm run --silent pixcode -- validate --all
+npm run --silent pixcode -- version
 ```
 
-`npm ci` 严格按照 `package-lock.json` 安装项目本地依赖。PixCode 调用本项目 `node_modules` 中锁定版本的 OpenSpec，不读取全局 PATH。
+`npm ci` 严格按照 `package-lock.json` 安装项目本地依赖。PixCode 调用本项目 `node_modules` 中锁定版本的 OpenSpec，不读取全局 PATH。此时根目录可以还没有 `openspec/`；它将在下一步初始化时生成。
 
 最低 Node.js 版本为 `20.20.0`。`doctor` 会检查：
 
@@ -72,6 +70,32 @@ npm run --silent pixcode -- init --agent codex
 - `none`
 
 初始化是幂等的：已有 OpenSpec 配置不会被覆盖。完成后会执行环境诊断。
+
+初始化完成后执行完整检查：
+
+```powershell
+npm run --silent pixcode -- doctor
+npm test
+npm run --silent pixcode -- validate --all
+```
+
+PixCode 框架中的初始化源位于：
+
+```text
+.pixcode/scaffolds/openspec/
+├─ config.yaml
+└─ schemas/pixcode-delivery/
+```
+
+纯框架仓库不需要预置根目录 `openspec/`。首次执行 `pixcode init` 时会生成：
+
+```text
+openspec/
+├─ config.yaml
+└─ schemas/pixcode-delivery/
+```
+
+再次执行初始化时保留项目已经维护的 `openspec/config.yaml`，刷新由 PixCode 管理的默认 Schema。后续产生的 `changes/`、`specs/` 和归档全部属于当前项目，不属于 PixCode 框架源码。
 
 ### 3.2 安装或刷新宿主 Skill
 
@@ -147,8 +171,9 @@ flowchart LR
     B --> C["review / update 评审修订"]
     C --> D["apply 实现"]
     D --> E["verify 真实验证"]
-    E --> F["sync 同步当前事实"]
-    F --> G["archive 归档"]
+    E --> F["sync 同步当前需求"]
+    F --> G["archive 归档过程"]
+    G --> H["publish 发布 pix-specs"]
 ```
 
 ### 5.1 探索
@@ -187,17 +212,57 @@ npm run --silent pixcode -- change create warehouse-offline-inventory
 npm run --silent pixcode -- validate warehouse-offline-inventory
 ```
 
+Change 根目录中的 `pixcode.yaml` 必须同时声明归档后的功能资产映射：
+
+```yaml
+schema_version: 1
+capabilities:
+  - id: warehouse-offline-inventory
+    name: 离线盘点
+    action: create
+    publication_path:
+      - 库房管理
+      - 盘点管理
+      - 离线盘点
+    assets:
+      - requirements
+      - solution
+      - process
+      - model
+      - contracts
+      - interaction
+      - test-strategy
+      - quality
+```
+
 ### 5.3 评审与修订
 
 建议按以下顺序评审：
 
 1. `proposal.md`：问题、范围、Capability 和 Target。
 2. `specs/*/spec.md`：可观察需求和 Scenario。
-3. `design/model.md`：模型、状态、不变量和持久化影响。
-4. `design/process.md`：主流程、失败路径和补偿。
-5. `design/contracts.md`：提供方、消费者、兼容与错误语义。
-6. `test/test-plan.md`：测试层级、环境、数据和证据。
-7. `tasks.md`：按 Target 拆分且可追溯的实现任务。
+3. `design.md`：集中评审功能、流程、模型、API、交互和质量影响。
+4. `test-plan.md`：测试层级、环境、数据、自动化边界和证据要求。
+5. `review.md`：分维度评审结论、问题、决定和实施准入意见。
+
+综合设计减少了固定文件数量，但没有减少评审维度。`design.md` 中模型、流程、API、交互等章节必须分别给出结论；不适用时说明依据。只有内容复杂到影响阅读时，才在 `design/` 下增加模型、流程、契约或原型附件。
+
+正式评审入口：
+
+```text
+$pixcode-workflow review warehouse-offline-inventory
+```
+
+`review.md` 初次生成必须保持“待评审”。评审完成后记录：
+
+- 参与角色和日期；
+- 各设计维度结论；
+- 阻断问题和建议问题；
+- 已确认设计决定；
+- 有条件通过的条件和关闭方式；
+- 是否允许生成 `tasks.md` 并进入实现。
+
+存在未关闭阻断问题时不得进入实现。
 
 修订入口：
 
@@ -228,7 +293,7 @@ $pixcode-workflow apply warehouse-offline-inventory
 $pixcode-verify-delivery warehouse-offline-inventory
 ```
 
-验证 Skill 从 Requirement、Scenario、Target 和 `test/test-plan.md` 推导真实测试：
+验证 Skill 从 Requirement、Scenario、Target 和 `test-plan.md` 推导真实测试：
 
 - 单 Target 单元、组件或 API 验证；
 - 前端页面和交互自动化；
@@ -267,10 +332,28 @@ npm run --silent pixcode -- archive warehouse-offline-inventory
 归档前默认检查：
 
 - `tasks.md` 不存在未勾选任务；
+- `review.md` 已真实通过且不存在未关闭阻断问题；
 - `verification.md` 已存在且结论不是“不通过”；
 - change 通过严格校验。
+- `pixcode.yaml` 的 Capability、中文路径和受影响资产有效。
 
 需求不可原地回退。若要撤销已生效需求，创建一个新的 change 描述反向业务变化。
+
+OpenSpec 归档成功后，命令会准备 `pix-specs/` 合并计划，但不会用脚本假装理解设计语义。`pixcode-workflow` 会读取当前 Spec、归档设计和已有结论，把本轮增量合并为当前完整状态，然后执行：
+
+```powershell
+npm run --silent pixcode -- capabilities finalize <归档目录名>
+npm run --silent pixcode -- capabilities validate
+npm run --silent pixcode -- validate --all
+```
+
+如果 OpenSpec 已归档而功能规格发布中断，执行：
+
+```powershell
+npm run --silent pixcode -- capabilities prepare <归档目录名>
+```
+
+不要重复归档，也不要把最新一轮设计文档直接覆盖既有完整结论。
 
 ## 6. 资产与命名
 
@@ -288,24 +371,58 @@ supply-general-approval-add-delegation
 warehouse-offline-inventory
 ```
 
-不要使用中文目录、空格、下划线、大写字母，也不要添加没有检索价值的 `establish`、`add`、`update` 前缀。
+OpenSpec 的 Change 和 Capability 机器目录不要使用中文、空格、下划线或大写字母，也不要添加没有检索价值的 `establish`、`add`、`update` 前缀。
 
-每份资产的中文标题和元数据应包含模块、功能、Change、Capability 与 Target。目录负责机器处理，中文内容负责人类检索和评审。
+`pix-specs/` 是例外：它支持任意层级中文目录和中文文件名。每个功能叶子目录用 `capability.yaml` 保存稳定英文 ID，因此中文名称和分类调整不会改变 Capability 身份。
 
 ## 7. 标准资产
 
+新版过程资产保持在 Change 根级，减少目录跳转。模型、流程、API 和交互合并为一份综合设计，但在文档内部仍是独立的强制评审维度。根级 `README.md` 只作为导航页。
+
 | 资产 | 核心问题 |
 | --- | --- |
+| `README.md` | 按阅读顺序导航本轮全部资产及状态 |
 | `proposal.md` | 为什么做、包含什么、影响哪些 Target |
+| `pixcode.yaml` | 归档后更新哪个 Capability 和哪些当前态资产 |
 | `specs/**/*.md` | 系统完成后必须表现出什么行为 |
-| `design/model.md` | 数据、关系、状态与不变量 |
-| `design/process.md` | 参与者如何流转，失败如何处理 |
-| `design/contracts.md` | API、事件、错误与兼容边界 |
-| `test/test-plan.md` | 测什么、在哪测、需要什么数据 |
-| `tasks.md` | 各 Target 按什么顺序实现 |
-| `verification.md` | 实际执行结果、证据与遗留风险 |
+| `design.md` | 功能、流程、模型、API、交互和质量如何设计 |
+| `test-plan.md` | 测什么、在哪测、需要什么数据和自动化 |
+| `review.md` | 是否经过正式评审、问题如何处理、能否实施 |
+| `tasks.md` | 评审通过后各 Target 按什么顺序实现 |
+| `verification.md` | 实际结果、证据、验收偏差和交付决定 |
 
-模型、流程或契约不适用时保留模板，并写明“不适用”及判断依据。
+模型、流程、契约或交互不适用时保留 `design.md` 中对应章节，并写明“不适用”及判断依据。
+
+模型涉及持久化实体时，每个实体必须使用独立字段表，逐字段填写类型、空值、长度、中文说明和来源/规则。`pixcode validate` 会拒绝缺少字段矩阵、字段组合写法和未完成占位符。
+
+### 7.1 当前态功能规格
+
+归档后的当前结论默认位于：
+
+```text
+pix-specs/
+└─ <中文业务域>/
+   └─ <中文子模块>/
+      └─ <中文功能>/
+         ├─ README.md
+         ├─ capability.yaml
+         ├─ 010-需求基线.md
+         ├─ 020-功能设计.md
+         ├─ 030-流程设计.md
+         ├─ 040-模型设计.md
+         ├─ 050-API与共享契约.md
+         ├─ 060-交互设计.md
+         ├─ 070-测试策略.md
+         ├─ 080-质量与运行约束.md
+         └─ 090-变更追溯.md
+```
+
+- `openspec/changes/archive/` 回答“每轮为什么改、如何交付和如何验收”。
+- `openspec/specs/` 是 OpenSpec 原生的当前需求事实。
+- `pix-specs/` 回答“这个功能现在完整是什么样”。
+- `010`—`080` 是长期有效结论；每轮验证报告和证据不复制进当前态目录。
+- `090`、`capability.yaml` 和各级索引由 PixCode 维护。
+- 业务语义修正必须创建新 Change，不直接修改 `pix-specs/`。
 
 ## 8. CLI 参考
 
@@ -316,6 +433,10 @@ pixcode validate [change|--all] [--json]
 pixcode change create <change-id> [--json]
 pixcode status [change] [--json]
 pixcode archive <change> [--yes] [--json]
+pixcode capabilities prepare <archive> [--json]
+pixcode capabilities finalize <archive> [--json]
+pixcode capabilities reindex [--json]
+pixcode capabilities validate [--json]
 pixcode adapters install <codex|claude|opencode>
 pixcode adapters refresh
 pixcode adapters list [--json]
@@ -339,12 +460,13 @@ npm run --silent pixcode -- doctor
 npm run --silent pixcode -- validate --all
 ```
 
-升级内部 OpenSpec 时同时修改：
+升级内部 OpenSpec 或默认过程 Schema 时同时修改：
 
 1. `package.json` 中的精确版本；
 2. `.pixcode/pixcode.json` 中的期望版本；
 3. `package-lock.json`；
-4. 本手册的版本说明。
+4. `.pixcode/scaffolds/openspec/`；
+5. 本手册的版本说明。
 
 升级后必须执行 CLI 测试、Schema 校验和至少一次 change 冒烟流程。当前脚本分发阶段不提供 `pixcode update`，框架源码通过 Git 更新，依赖通过 `npm ci` 复现。
 

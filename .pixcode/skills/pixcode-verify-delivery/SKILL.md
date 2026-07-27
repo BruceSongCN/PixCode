@@ -1,6 +1,6 @@
 ---
 name: pixcode-verify-delivery
-description: 依据 PixCode change 的需求、测试方案和 Target 边界执行真实验证，整理 verification.md 与证据索引。用于实现完成后的 API、前端、契约、集成或端到端测试，以及正式测试交接；不用于编写需求、猜测测试数据或把未执行项目标记为通过。
+description: 依据 PixCode change 的需求、测试方案和 Target 边界执行真实验证，整理 verification.md、验收结论与证据索引。用于实现完成后的 API、前端、契约、集成或端到端测试，以及正式测试交接；不用于编写需求、猜测测试数据或把未执行项目标记为通过。
 ---
 
 # 验证 PixCode 交付
@@ -14,7 +14,7 @@ npm run --silent pixcode -- status --json
 npm run --silent pixcode -- status "<change>" --json
 ```
 
-确认 `tasks` 已完成或用户明确要求阶段性验证。读取 proposal、delta specs、model、process、contracts、test-plan 和 tasks。
+确认 `tasks` 已完成或用户明确要求阶段性验证。读取 proposal、delta specs、solution、model、process、contracts、interaction、test-plan 和 tasks。
 
 ## 2. 解析验证范围
 
@@ -38,7 +38,7 @@ openspec/changes/<change>/evidence/<target>/<run-id>/
 
 ## 4. 形成结论
 
-读取 `openspec/config.yaml`、当前 Schema 的 `schema.yaml` 和 `templates/verification.md`，按模板生成 change 的 `verification.md`：
+读取 `openspec/config.yaml`、当前 Schema 的 `schema.yaml` 和 `templates/070-verification.md`，按模板生成 change 根目录的 `verification.md`：
 
 - 只把真实执行且满足断言的项目标记为通过；
 - 逐项关联 Requirement / Scenario、Target 和证据；

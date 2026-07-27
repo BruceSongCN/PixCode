@@ -17,17 +17,27 @@ rules:
     - 标题和元数据必须包含模块中文名、功能中文名、Change、Capability 与 Target。
     - 明确 In Scope、Out of Scope 和受影响 Target。
     - 区分需求语义变化与纯实现调整。
+  publication-map:
+    - 为每个 Capability 声明稳定英文 ID、中文多级发布路径和本轮受影响的当前态资产。
+    - 新功能使用 create；后续变化使用 update。
   specs:
     - Capability 命名为 <module-id>-<feature-id>，不得省略模块。
     - 标题和元数据必须与 proposal 一致。
     - Requirement 必须能被 Scenario 验证。
     - 跨 Target 行为必须描述可观察结果和责任边界。
-  contracts:
-    - 标明提供方、消费者、兼容策略和发布顺序。
+  design:
+    - 在一个综合设计稿中逐项覆盖功能、流程、模型、API 与共享契约、交互和质量影响。
+    - 不适用的评审维度保留章节并说明依据；复杂附件按需拆分，不默认生成平行文件。
+    - API 与共享契约必须标明提供方、消费者、兼容策略和发布顺序。
   test-plan:
     - 从 Requirement 与 Scenario 推导测试，不按历史目录机械寻找账号或数据。
     - 同时覆盖单 Target 验证和适用的跨 Target 验证。
+  review:
+    - 初始状态必须是待评审，只有真实评审后才能记录通过结论。
+    - 模型、流程、API、交互、测试和 Target 边界必须分别给出评审意见。
+    - 未关闭的阻断问题禁止进入实现。
   tasks:
     - 按独立代码仓库拆分任务，不假设跨仓提交具有原子性。
   verification:
     - 只记录真实执行结果，并为失败或未执行项保留明确结论。
+    - 在同一文件记录验收偏差和最终交付决定，不另建固定验收文件。

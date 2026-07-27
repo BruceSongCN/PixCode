@@ -1,0 +1,22 @@
+{
+  "name": "capability-baseline",
+  "version": 1,
+  "description": "将已归档 OpenSpec change 合并为 PixCode 当前态功能规格",
+  "assets": {
+    "requirements": "010-需求基线.md",
+    "solution": "020-功能设计.md",
+    "process": "030-流程设计.md",
+    "model": "040-模型设计.md",
+    "contracts": "050-API与共享契约.md",
+    "interaction": "060-交互设计.md",
+    "test-strategy": "070-测试策略.md",
+    "quality": "080-质量与运行约束.md"
+  },
+  "initialSources": {
+    "requirements": "openspec-spec",
+    "test-strategy": "test-plan.md"
+  },
+  "generated": {
+    "traceability": "090-变更追溯.md"
+  }
+}

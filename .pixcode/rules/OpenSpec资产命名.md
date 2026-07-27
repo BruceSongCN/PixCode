@@ -15,7 +15,7 @@ OpenSpec 目录名服务于 CLI 稳定识别，中文标题和元数据服务于
 
 ## 中文资产身份
 
-proposal、delta spec、模型、流程、契约、测试方案、任务和验证报告必须在顶部包含：
+proposal、delta spec、综合设计、测试方案、评审记录、任务和验证交付报告必须在顶部包含：
 
 | 属性 | 要求 |
 | --- | --- |
@@ -31,6 +31,13 @@ proposal、delta spec、模型、流程、契约、测试方案、任务和验�
 ## 导航
 
 - Change 根目录 `README.md` 使用“模块中文名｜功能中文名”作为标题。
-- README 简述本轮目标，并链接 proposal、spec、模型、流程、契约、测试方案、任务和验证报告。
+- README 简述本轮目标，并链接 proposal、spec、综合设计、测试方案、评审记录、任务和验证交付报告。
 - 尚未生成的条件资产应在索引中标明状态，不创建虚假的执行结果。
 - `openspec/specs/` 中归档后的 Capability 继续使用相同的模块化机器标识和中文标题。
+
+## 当前态功能规格
+
+- Change 根目录必须包含 `pixcode.yaml`，显式映射稳定 Capability ID、中文名称、发布路径和本轮受影响资产。
+- `pix-specs/` 支持任意层级中文目录；阅读型资产使用带序号的中文文件名。
+- 中文路径只负责人工分类和检索，机器关联始终使用 `capability.yaml` 中的英文 Capability ID。
+- OpenSpec Change 与 Capability 目录继续使用小写英文 `kebab-case`；“OpenSpec 目录不得使用中文”不适用于 `pix-specs/`。

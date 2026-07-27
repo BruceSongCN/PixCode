@@ -14,8 +14,9 @@ PixCode（`Pi × Code`）是一套集成 OpenSpec 的轻量 AI 编程工程框�
 | 意图 | 入口 |
 | --- | --- |
 | 讨论和澄清想法 | `$pixcode-workflow explore` |
-| 显式创建完整变更资产 | `$pixcode-workflow propose <description>` |
+| 创建评审所需变更资产 | `$pixcode-workflow propose <description>` |
 | 修订已有变更资产 | `$pixcode-workflow update <change>` |
+| 正式设计评审 | `$pixcode-workflow review <change>` |
 | 按已确认变更实现 | `$pixcode-workflow apply <change>` |
 | 执行并汇总交付验证 | `$pixcode-verify-delivery <change>` |
 | 不归档而同步当前事实 | `$pixcode-workflow sync <change>` |
@@ -32,6 +33,7 @@ PixCode（`Pi × Code`）是一套集成 OpenSpec 的轻量 AI 编程工程框�
 - 真实验证与证据：`.pixcode/skills/pixcode-verify-delivery/SKILL.md`
 - 任务分流与资产原则：`.pixcode/rules/直接任务与SPEC.md`
 - Change、Capability 与中文资产标题：`.pixcode/rules/OpenSpec资产命名.md`
+- 归档后的当前态功能规格：`.pixcode/rules/当前态功能规格.md`
 - 多仓库、多 Target 协作：`.pixcode/rules/多目标交付.md`
 - 测试计划、执行和证据：`.pixcode/rules/测试与证据.md`
 - 具体代码风格、构建和测试命令：目标 `src/<target>/` 仓库内最接近的规则文件
@@ -41,4 +43,5 @@ PixCode（`Pi × Code`）是一套集成 OpenSpec 的轻量 AI 编程工程框�
 - `src/` 下项目是独立仓库，分别检查状态、修改、验证和提交。
 - 保留用户已有改动，不清理或覆盖无关文件。
 - 共享需求和契约只能在对应 OpenSpec change 中修改；实现任务不得用猜测改写已确认设计。
+- `pix-specs/` 是归档后生成的当前完整结论；不得绕过 Change 直接修改其中的业务语义。
 - 不提交凭证、生产数据和大型运行产物，不操作生产环境或未经授权的共享数据库。

@@ -1,0 +1,131 @@
+name: pixcode-delivery
+version: 3
+description: 面向正式设计评审、多目标协作和测试交接的轻量 PixCode 交付流程
+
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    description: 说明变更动机、边界、能力和影响范围
+    template: 010-proposal.md
+    instruction: |
+      说明为什么需要本次变更，以及本轮明确包含和不包含什么。
+      Change 标识默认使用 `<module-id>-<feature-id>`；后续并行变更追加具体 change-topic。
+      标题和元数据必须包含模块中文名、功能中文名、Change、Capability 和 Target。
+      必须列出新增或修改的 Capability，并标明受影响 Target。
+      保持简洁；设计方法和实现细节留给后续资产。
+    requires: []
+
+  - id: index
+    generates: README.md
+    description: 提供变更资产导航、阅读顺序和当前交付状态
+    template: 000-index.md
+    instruction: |
+      根据 proposal 填写中文标题、范围摘要和 Target。
+      按顺序链接当前 Schema 的全部过程资产。
+      对尚未生成或尚未完成的资产标明真实状态，不得虚构评审、验证或交付结论。
+      README 只承担导航职责，不复制正文。
+    requires:
+      - proposal
+
+  - id: publication-map
+    generates: pixcode.yaml
+    description: 声明归档后的 Capability、中文分级路径和受影响当前态资产
+    template: 015-pixcode.yaml
+    instruction: |
+      为 proposal 中每个新增或修改的 Capability 声明一项映射。
+      id 必须与 delta spec 的 Capability ID 完全一致，name 使用功能中文名。
+      publication_path 使用一至多级中文目录。
+      create 只用于首次建立功能资产；后续变更使用 update。
+      assets 只列本轮实际影响的当前态结论；未受影响资产不得机械重写。
+    requires:
+      - proposal
+
+  - id: specs
+    generates: "specs/**/*.md"
+    description: 以可验证需求和场景描述系统应当做什么
+    template: 020-spec.md
+    instruction: |
+      为 proposal 中的每个 Capability 创建 delta spec。
+      Capability 标识必须使用 `<module-id>-<feature-id>`。
+      严格使用 OpenSpec 的 ADDED、MODIFIED、REMOVED、RENAMED 结构。
+      每项 Requirement 必须使用 SHALL 或 MUST，并至少包含一个 WHEN/THEN Scenario。
+      修改既有 Requirement 时必须复制并更新完整 Requirement 块。
+    requires:
+      - proposal
+      - publication-map
+
+  - id: design
+    generates: design.md
+    description: 集中承载本轮功能、流程、模型、API、交互和质量设计，作为正式评审输入
+    template: 030-design.md
+    instruction: |
+      只描述本次变更涉及的设计增量及其对当前系统的影响，不重复 proposal。
+      必须逐项覆盖功能、流程、模型、API 与共享契约、交互、质量和运行影响。
+      不适用的维度保留章节，并明确“不适用”及判断依据。
+      新增持久化实体必须使用独立字段表，逐字段填写字段、类型、空值、默认长度、中文含义/XML 字段说明、来源/规则。
+      既有实体只列本轮字段增量；每行只能定义一个字段，字符串长度必须引用项目常量并注明数值。
+      跨 Target 设计必须标明提供方、消费者、协作边界和发布顺序。
+      复杂图示、原型或外部契约可按需放入 design/ 附件目录，由 design.md 统一导航；不得默认拆分。
+    requires:
+      - specs
+
+  - id: test-plan
+    generates: test-plan.md
+    description: 从需求和综合设计推导分目标与跨目标测试方案
+    template: 040-test-plan.md
+    instruction: |
+      将关键 Requirement 与 Scenario 映射到测试层级、Target、环境、数据和证据。
+      区分单目标验证、契约测试、集成测试和端到端测试。
+      只声明资源角色和数据特征，不写入真实账号、密码或 Token。
+      明确自动化范围、人工验证范围、通过标准和阻断条件。
+    requires:
+      - design
+
+  - id: review
+    generates: review.md
+    description: 记录需求、模型、流程、API、交互和测试方案的正式评审结论
+    template: 050-review.md
+    instruction: |
+      评审输入为 proposal、specs、design 和 test-plan。
+      分别记录需求、功能、流程、模型、API、交互、测试和跨 Target 边界的结论。
+      初始状态必须是“待评审”；不得由资产生成 Agent 自行标记通过。
+      只有实际评审后才能记录“通过”“有条件通过”或“不通过”，并写明参与角色、日期、问题、决定和待办。
+      有条件通过必须列出条件、责任人和关闭方式；未关闭的阻断问题不得进入实现。
+    requires:
+      - specs
+      - design
+      - test-plan
+
+  - id: tasks
+    generates: tasks.md
+    description: 评审通过后按 Target 与依赖关系拆分可验证实现任务
+    template: 060-tasks.md
+    instruction: |
+      仅在 review.md 已形成真实通过或已接受的有条件通过结论后生成。
+      使用 `- [ ] X.Y` 格式，按共享契约、各 Target 实现、自动化测试和联调收口分组。
+      每项任务必须有明确完成条件，并关联 Requirement、Scenario 或评审决定。
+    requires:
+      - review
+
+  - id: verification
+    generates: verification.md
+    description: 汇总真实验证、证据、偏差、验收和最终交付决定
+    template: 070-verification.md
+    instruction: |
+      仅依据真实执行结果填写，不得把计划或推断写成已通过。
+      按 Target 汇总命令、环境、结果和证据，并追溯 Requirement 与 Scenario。
+      未执行或失败项目必须显式列出原因、影响和后续动作。
+      在同一文件中记录验收范围、偏差处理和最终交付决定；不得提前标记通过。
+    requires:
+      - tasks
+      - test-plan
+
+apply:
+  requires:
+    - tasks
+  tracks: tasks.md
+  instruction: |
+    开始实现前确认 review.md 已真实通过，且不存在未关闭阻断问题。
+    按 tasks.md 的依赖顺序实现并及时勾选。
+    开始每个 Target 前读取其仓库规则；保持共享契约与 specs 一致。
+    遇到需求或契约缺口时暂停，不用实现猜测替代设计决定。

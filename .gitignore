@@ -14,9 +14,6 @@
 /.claude/skills/openspec-*/
 /.opencode/skills/openspec-*/
 
-# 本机历史备份，不属于 PixCode 框架或项目交付资产
-/history/
-
 # OpenSpec / PixCode 验证运行证据
 /openspec/changes/*/evidence/**/*.log
 /openspec/changes/*/evidence/**/*.zip

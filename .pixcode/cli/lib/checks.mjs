@@ -3,6 +3,7 @@ import path from "node:path";
 import { exists } from "./project.mjs";
 import { resolveOpenSpec, runOpenSpec } from "../adapters/openspec.mjs";
 import { listHostAdapters } from "../adapters/agents.mjs";
+import { scaffoldMatchesRuntime } from "./scaffold.mjs";
 
 function nodeVersionAtLeast(current, minimum) {
   const left = current.replace(/^v/, "").split(".").map(Number);
@@ -80,12 +81,22 @@ export async function doctor(root, config) {
 
   for (const [item, relative] of [
     ["PixCode 配置", ".pixcode/pixcode.json"],
+    ["OpenSpec 初始化脚手架", ".pixcode/scaffolds/openspec/config.yaml"],
     ["OpenSpec 配置", "openspec/config.yaml"],
     ["默认 Schema", `openspec/schemas/${config.defaultSchema}/schema.yaml`],
+    [
+      "当前态归档模板",
+      `.pixcode/templates/${config.publication?.template ?? "capability-baseline"}/template.json`,
+    ],
     ["Target 根目录", "src"],
   ]) {
     checks.push({ ok: await exists(path.join(root, relative)), item, detail: relative });
   }
+  checks.push({
+    ok: await scaffoldMatchesRuntime(root, config),
+    item: "OpenSpec Schema 同步",
+    detail: `openspec/schemas/${config.defaultSchema} 与 PixCode 脚手架一致`,
+  });
 
   checks.push(...(await validateSkills(root)).map((check) => ({ ...check, item: `Skill ${check.item}` })));
   const adapters = await listHostAdapters(root);

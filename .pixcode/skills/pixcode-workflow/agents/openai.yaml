@@ -1,4 +1,4 @@
 interface:
   display_name: "PixCode 工作流"
-  short_description: "统一驱动 PixCode 规格探索、提案、实现、同步、归档与交付衔接"
-  default_prompt: "使用 $pixcode-workflow 创建并推进一个 PixCode 规格变更。"
+  short_description: "驱动 PixCode 提案、设计评审、实现验证与当前态发布"
+  default_prompt: "使用 $pixcode-workflow 推进规格变更，在设计后组织正式评审，归档后发布完整 pix-specs。"

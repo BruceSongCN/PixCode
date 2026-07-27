@@ -1,9 +1,14 @@
 {
   "schemaVersion": 1,
-  "frameworkVersion": "0.1.0",
+  "frameworkVersion": "0.4.0",
   "engine": {
     "package": "@fission-ai/openspec",
     "version": "1.6.0"
   },
-  "defaultSchema": "pixcode-delivery"
+  "defaultSchema": "pixcode-delivery",
+  "publication": {
+    "root": "pix-specs",
+    "template": "capability-baseline",
+    "templateVersion": 1
+  }
 }
