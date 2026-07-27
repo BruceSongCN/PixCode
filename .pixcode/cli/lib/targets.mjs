@@ -54,7 +54,7 @@ function normalizeTargets(root, workspace) {
       path: relative.split(path.sep).join("/"),
       directory,
       repository: target.repository,
-      branch: target.branch ?? null,
+      expectedBranch: target.branch ?? null,
     };
   });
 }
@@ -82,16 +82,20 @@ export async function targetStatus(root) {
       runGit(["branch", "--show-current"], { cwd: target.directory }),
       runGit(["status", "--porcelain"], { cwd: target.directory }),
     ]);
+    const repositoryMatches =
+      origin.ok &&
+      origin.stdout.replace(/\.git$/i, "").toLowerCase() ===
+        target.repository.replace(/\.git$/i, "").toLowerCase();
+    const branchMatches =
+      branch.ok && (!target.expectedBranch || branch.stdout === target.expectedBranch);
     result.push({
       ...target,
-      state: origin.ok ? "ready" : "invalid",
+      state: origin.ok && repositoryMatches ? "ready" : "mismatch",
       origin: origin.ok ? origin.stdout : null,
       branch: branch.ok ? branch.stdout : null,
       dirty: changes.ok ? Boolean(changes.stdout) : null,
-      repositoryMatches:
-        origin.ok &&
-        origin.stdout.replace(/\.git$/i, "").toLowerCase() ===
-          target.repository.replace(/\.git$/i, "").toLowerCase(),
+      repositoryMatches,
+      branchMatches,
     });
   }
   return result.map(({ directory: _directory, ...target }) => target);
@@ -108,7 +112,7 @@ export async function bootstrapTargets(root) {
     }
     await mkdir(path.dirname(target.directory), { recursive: true });
     const args = ["clone"];
-    if (target.branch) args.push("--branch", target.branch);
+    if (target.expectedBranch) args.push("--branch", target.expectedBranch);
     args.push(target.repository, target.directory);
     const clone = await runGit(args, { cwd: root });
     if (!clone.ok) {

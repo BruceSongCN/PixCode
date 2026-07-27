@@ -100,7 +100,7 @@ targets:
       id: "backend",
       path: "src/backend",
       repository: "https://example.com/backend.git",
-      branch: "main",
+      expectedBranch: "main",
     },
   ]);
   const status = await targetStatus(root);
