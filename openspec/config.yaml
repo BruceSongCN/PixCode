@@ -1,0 +1,33 @@
+# 当前项目默认使用 PixCode 的轻量交付 Schema。
+schema: pixcode-delivery
+
+# 这些上下文会提供给 OpenSpec 生成资产的 Agent。
+context: |
+  PixCode 基于 OpenSpec 工作，不维护第二套变更生命周期。
+  业务代码位于 src/ 下的独立仓库；每个一级子目录视为一个候选 Target。
+  Target 的真实名称、职责和验证方式以目标仓库规则及变更 proposal 为准。
+  Change 和 Capability 的机器标识必须包含 module-id 与 feature-id；中文模块名和功能名写入每份交付资产的标题与元数据。
+  共享设计和契约使用中文；代码标识符、协议字段和命令保持原文。
+  不写入真实账号、密码、Token、个人地址或生产数据。
+
+# 这里只补充项目交付约束；OpenSpec 已有规则不在这里重复。
+rules:
+  proposal:
+    - Change 默认命名为 <module-id>-<feature-id>；同一功能的后续变更追加具体 change-topic。
+    - 标题和元数据必须包含模块中文名、功能中文名、Change、Capability 与 Target。
+    - 明确 In Scope、Out of Scope 和受影响 Target。
+    - 区分需求语义变化与纯实现调整。
+  specs:
+    - Capability 命名为 <module-id>-<feature-id>，不得省略模块。
+    - 标题和元数据必须与 proposal 一致。
+    - Requirement 必须能被 Scenario 验证。
+    - 跨 Target 行为必须描述可观察结果和责任边界。
+  contracts:
+    - 标明提供方、消费者、兼容策略和发布顺序。
+  test-plan:
+    - 从 Requirement 与 Scenario 推导测试，不按历史目录机械寻找账号或数据。
+    - 同时覆盖单 Target 验证和适用的跨 Target 验证。
+  tasks:
+    - 按独立代码仓库拆分任务，不假设跨仓提交具有原子性。
+  verification:
+    - 只记录真实执行结果，并为失败或未执行项保留明确结论。

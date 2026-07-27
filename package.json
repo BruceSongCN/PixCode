@@ -1,0 +1,17 @@
+{
+  "name": "pixcode-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.20.0"
+  },
+  "dependencies": {
+    "@fission-ai/openspec": "1.6.0"
+  },
+  "scripts": {
+    "pixcode": "node .pixcode/cli/pixcode.mjs",
+    "test": "npm run test:pixcode",
+    "test:pixcode": "node --test .pixcode/cli/tests/*.test.mjs"
+  }
+}

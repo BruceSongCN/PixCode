@@ -1,0 +1,31 @@
+# 独立业务代码仓库
+/src/*/
+
+# 项目本地 Node.js 依赖
+/node_modules/
+
+# PixCode 为各 Agent 宿主生成的可刷新适配副本
+/.codex/skills/pixcode-*/
+/.claude/skills/pixcode-*/
+/.opencode/skills/pixcode-*/
+
+# OpenSpec 直接生成的宿主能力不是 PixCode 源码
+/.codex/skills/openspec-*/
+/.claude/skills/openspec-*/
+/.opencode/skills/openspec-*/
+
+# 本机历史备份，不属于 PixCode 框架或项目交付资产
+/history/
+
+# OpenSpec / PixCode 验证运行证据
+/openspec/changes/*/evidence/**/*.log
+/openspec/changes/*/evidence/**/*.zip
+/openspec/changes/*/evidence/**/*.png
+/openspec/changes/*/evidence/**/*.har
+
+# 通用运行产物
+**/__pycache__/
+*.py[cod]
+*.log
+.DS_Store
+Thumbs.db
