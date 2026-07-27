@@ -1,9 +1,10 @@
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { exists } from "./project.mjs";
+import { frameworkAssetsRoot } from "./runtime.mjs";
 
 export async function installOpenSpecScaffold(root, config) {
-  const source = path.join(root, ".pixcode", "scaffolds", "openspec");
+  const source = path.join(frameworkAssetsRoot, "scaffolds", "openspec");
   const sourceConfig = path.join(source, "config.yaml");
   const sourceSchema = path.join(
     source,
@@ -49,7 +50,9 @@ export async function installOpenSpecScaffold(root, config) {
       {
         managedBy: "PixCode",
         frameworkVersion: config.frameworkVersion,
-        source: path.relative(root, sourceSchema).split(path.sep).join("/"),
+        source: `PixCode:${path.relative(frameworkAssetsRoot, sourceSchema)
+          .split(path.sep)
+          .join("/")}`,
       },
       null,
       2,
@@ -77,8 +80,7 @@ export async function installOpenSpecScaffold(root, config) {
 
 export async function scaffoldMatchesRuntime(root, config) {
   const sourceSchema = path.join(
-    root,
-    ".pixcode",
+    frameworkAssetsRoot,
     "scaffolds",
     "openspec",
     "schemas",

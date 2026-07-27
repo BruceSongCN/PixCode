@@ -4,6 +4,7 @@ import { exists } from "./project.mjs";
 import { resolveOpenSpec, runOpenSpec } from "../adapters/openspec.mjs";
 import { listHostAdapters } from "../adapters/agents.mjs";
 import { scaffoldMatchesRuntime } from "./scaffold.mjs";
+import { frameworkAssetsRoot } from "./runtime.mjs";
 
 function nodeVersionAtLeast(current, minimum) {
   const left = current.replace(/^v/, "").split(".").map(Number);
@@ -16,10 +17,10 @@ function nodeVersionAtLeast(current, minimum) {
 }
 
 export async function validateSkills(root) {
-  const skillsRoot = path.join(root, ".pixcode", "skills");
+  const skillsRoot = path.join(frameworkAssetsRoot, "skills");
   const findings = [];
   if (!(await exists(skillsRoot))) {
-    return [{ ok: false, item: "skills", detail: "缺少 .pixcode/skills" }];
+    return [{ ok: false, item: "skills", detail: `缺少 ${skillsRoot}` }];
   }
   const entries = await readdir(skillsRoot, { withFileTypes: true });
   for (const entry of entries.filter((item) => item.isDirectory())) {
@@ -79,18 +80,37 @@ export async function doctor(root, config) {
     checks.push({ ok: false, item: "OpenSpec 本地依赖", detail: error.message });
   }
 
-  for (const [item, relative] of [
-    ["PixCode 配置", ".pixcode/pixcode.json"],
-    ["OpenSpec 初始化脚手架", ".pixcode/scaffolds/openspec/config.yaml"],
-    ["OpenSpec 配置", "openspec/config.yaml"],
-    ["默认 Schema", `openspec/schemas/${config.defaultSchema}/schema.yaml`],
+  for (const [item, absolute, detail] of [
+    ["PixCode 配置", path.join(frameworkAssetsRoot, "pixcode.json"), "PixCode runtime"],
+    [
+      "OpenSpec 初始化脚手架",
+      path.join(frameworkAssetsRoot, "scaffolds", "openspec", "config.yaml"),
+      "PixCode runtime",
+    ],
+    [
+      "工作区配置",
+      path.join(root, ".pixcode", "workspace.yaml"),
+      ".pixcode/workspace.yaml",
+    ],
+    ["OpenSpec 配置", path.join(root, "openspec", "config.yaml"), "openspec/config.yaml"],
+    [
+      "默认 Schema",
+      path.join(root, "openspec", "schemas", config.defaultSchema, "schema.yaml"),
+      `openspec/schemas/${config.defaultSchema}/schema.yaml`,
+    ],
     [
       "当前态归档模板",
-      `.pixcode/templates/${config.publication?.template ?? "capability-baseline"}/template.json`,
+      path.join(
+        frameworkAssetsRoot,
+        "templates",
+        config.publication?.template ?? "capability-baseline",
+        "template.json",
+      ),
+      "PixCode runtime",
     ],
-    ["Target 根目录", "src"],
+    ["Target 根目录", path.join(root, "src"), "src"],
   ]) {
-    checks.push({ ok: await exists(path.join(root, relative)), item, detail: relative });
+    checks.push({ ok: await exists(absolute), item, detail });
   }
   checks.push({
     ok: await scaffoldMatchesRuntime(root, config),

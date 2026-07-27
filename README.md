@@ -2,6 +2,8 @@
 
 PixCode（`Pi × Code`）是一套轻量、Agent 中立的 AI 编程工程驱动框架。它对外提供统一的规格与交付工作流，内部集成项目本地 [OpenSpec](https://github.com/Fission-AI/OpenSpec) 引擎，不要求用户全局安装或直接操作 OpenSpec。
 
+业务项目建议把本仓库固定为 `.pixcode/runtime` Git Submodule，并在业务仓库自己的 `.pixcode/workspace.yaml` 中维护 Target 仓库清单。Target 仍是普通独立克隆，由 `pixcode targets bootstrap|status` 管理，不作为 submodule 嵌套。
+
 PixCode 重点补充 OpenSpec 未覆盖的工程语境：
 
 - 中文交付模板与可审计的模型、流程、契约、测试方案；

@@ -9,6 +9,7 @@ import {
 import path from "node:path";
 import { parse, stringify } from "yaml";
 import { assertChangeId, exists } from "./project.mjs";
+import { frameworkAssetsRoot } from "./runtime.mjs";
 
 const SAFE_SEGMENT = /^[^<>:"/\\|?*\u0000-\u001f]+$/u;
 const RESERVED_WINDOWS_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu;
@@ -35,9 +36,9 @@ function publicationRoot(root, config) {
   return resolved;
 }
 
-function templateRoot(root, config) {
+function templateRoot(_root, config) {
   const template = config.publication?.template ?? "capability-baseline";
-  return path.join(root, ".pixcode", "templates", template);
+  return path.join(frameworkAssetsRoot, "templates", template);
 }
 
 function assertSegment(segment) {

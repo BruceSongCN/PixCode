@@ -1,0 +1,6 @@
+# PixCode 框架仓库自身的开发工作区配置。
+# 业务项目应在自己的根仓库中维护同名文件，并将 PixCode 作为 runtime submodule。
+schema_version: 1
+name: PixCode
+targets: {}
+

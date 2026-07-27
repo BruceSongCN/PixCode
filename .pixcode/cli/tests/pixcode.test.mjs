@@ -18,6 +18,7 @@ import {
   validateCapabilities,
 } from "../lib/capabilities.mjs";
 import { assertChangeId, exists, parseFlags } from "../lib/project.mjs";
+import { listTargets, targetStatus } from "../lib/targets.mjs";
 
 const testRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const cliPath = path.join(testRoot, ".pixcode", "cli", "pixcode.mjs");
@@ -73,6 +74,37 @@ test("命令参数同时解析位置参数与标志", () => {
     positional: ["demo-change"],
     flags: { json: true, agent: "codex" },
   });
+});
+
+test("工作区清单声明普通独立仓库而不要求 Git submodule", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-targets-"));
+  context.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  await mkdir(path.join(root, ".pixcode"), { recursive: true });
+  await writeFile(
+    path.join(root, ".pixcode", "workspace.yaml"),
+    `schema_version: 1
+name: Demo
+targets:
+  backend:
+    path: src/backend
+    repository: https://example.com/backend.git
+    branch: main
+`,
+    "utf8",
+  );
+
+  assert.deepEqual(await listTargets(root), [
+    {
+      id: "backend",
+      path: "src/backend",
+      repository: "https://example.com/backend.git",
+      branch: "main",
+    },
+  ]);
+  const status = await targetStatus(root);
+  assert.equal(status[0].state, "missing");
 });
 
 test("模型字段校验接受逐字段标准矩阵", () => {
@@ -219,6 +251,11 @@ test("CLI 可在新工作区创建并查询 Change", async (context) => {
   });
   const { cp } = await import("node:fs/promises");
   await mkdir(path.join(root, ".pixcode"), { recursive: true });
+  await writeFile(
+    path.join(root, ".pixcode", "workspace.yaml"),
+    "schema_version: 1\nname: Test\ntargets: {}\n",
+    "utf8",
+  );
   await cp(
     path.join(testRoot, ".pixcode", "pixcode.json"),
     path.join(root, ".pixcode", "pixcode.json"),
@@ -266,6 +303,11 @@ test("pixcode init 从框架脚手架生成 OpenSpec 项目目录并保留项目
   });
   const { cp } = await import("node:fs/promises");
   await mkdir(path.join(root, ".pixcode"), { recursive: true });
+  await writeFile(
+    path.join(root, ".pixcode", "workspace.yaml"),
+    "schema_version: 1\nname: Test\ntargets: {}\n",
+    "utf8",
+  );
   await cp(
     path.join(testRoot, ".pixcode", "pixcode.json"),
     path.join(root, ".pixcode", "pixcode.json"),

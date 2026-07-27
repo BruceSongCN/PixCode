@@ -17,6 +17,7 @@ import {
   validateCapabilityPublicationMap,
 } from "./lib/capabilities.mjs";
 import { installOpenSpecScaffold } from "./lib/scaffold.mjs";
+import { bootstrapTargets, listTargets, targetStatus } from "./lib/targets.mjs";
 import {
   assertChangeId,
   exists,
@@ -38,6 +39,9 @@ const HELP = `PixCode 轻量 AI 工程驱动器
   pixcode capabilities finalize <archive> [--json]
   pixcode capabilities reindex [--json]
   pixcode capabilities validate [--json]
+  pixcode targets list [--json]
+  pixcode targets status [--json]
+  pixcode targets bootstrap [--json]
   pixcode adapters install <codex|claude|opencode>
   pixcode adapters refresh
   pixcode adapters list [--json]
@@ -233,14 +237,13 @@ export async function main(argv = process.argv.slice(2)) {
     return;
   }
   if (["version", "--version", "-v"].includes(argv[0])) {
-    const root = await findProjectRoot();
-    const config = await readPixCodeConfig(root);
+    const config = await readPixCodeConfig();
     console.log(`PixCode ${config.frameworkVersion}`);
     return;
   }
 
   const root = await findProjectRoot();
-  const config = await readPixCodeConfig(root);
+  const config = await readPixCodeConfig();
   const command = argv[0];
   const { positional, flags } = parseFlags(argv.slice(1));
 
@@ -319,6 +322,25 @@ export async function main(argv = process.argv.slice(2)) {
       const result = await validateCapabilities(root, config);
       output(result, Boolean(flags.json));
       if (!result.ok) process.exitCode = 1;
+      return;
+    }
+  }
+  if (command === "targets") {
+    const action = positional[0];
+    if (action === "list") {
+      output(await listTargets(root), Boolean(flags.json));
+      return;
+    }
+    if (action === "status") {
+      const result = await targetStatus(root);
+      output(result, Boolean(flags.json));
+      if (result.some((target) => !["ready", "missing"].includes(target.state))) {
+        process.exitCode = 1;
+      }
+      return;
+    }
+    if (action === "bootstrap") {
+      output(await bootstrapTargets(root), Boolean(flags.json));
       return;
     }
   }

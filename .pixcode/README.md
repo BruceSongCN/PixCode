@@ -8,6 +8,7 @@
 .pixcode/
 ├─ README.md
 ├─ pixcode.json                   # 框架、引擎和默认 Schema 版本
+├─ workspace.yaml                 # 仅用于 PixCode 仓库自身开发
 ├─ cli/                           # 不发布 npm 包阶段的项目本地 CLI
 │  ├─ pixcode.mjs
 │  ├─ adapters/
@@ -44,6 +45,42 @@
 | `openspec/` | 当前项目 / OpenSpec | `pixcode init` 生成的项目配置、活动 Change、当前 Spec 和归档 |
 | `pix-specs/` | PixCode | 按中文多级目录组织的当前态功能规格 |
 | `src/` | 业务项目 | 各 Target 的代码、技术规则和测试实现 |
+
+## 作为项目依赖接入
+
+业务项目将 PixCode 仓库固定为 `.pixcode/runtime` Git Submodule；框架实现和业务配置不再共用一个 Git 仓库：
+
+```text
+<workspace>/
+├─ .pixcode/
+│  ├─ runtime/                    # PixCode.git submodule
+│  └─ workspace.yaml              # 业务工作区配置和 Target 仓库清单
+├─ openspec/
+├─ pix-specs/
+└─ src/
+```
+
+PixCode CLI 以自身文件位置定位框架 rules、skills、scaffolds 和 templates，以当前目录向上定位 `.pixcode/workspace.yaml`。因此框架既可在自身仓库开发，也可从 `.pixcode/runtime` 运行。
+
+`workspace.yaml` 中的 `targets` 只声明普通独立 Git 仓库，不把业务代码变成 submodule：
+
+```yaml
+schema_version: 1
+name: Example
+targets:
+  backend:
+    path: src/backend
+    repository: https://example.com/backend.git
+    branch: main
+```
+
+```powershell
+npm run --silent pixcode -- targets list
+npm run --silent pixcode -- targets status
+npm run --silent pixcode -- targets bootstrap
+```
+
+`targets bootstrap` 只克隆缺失目录；已存在的 Target 一律保留，不执行隐式 pull、checkout 或覆盖。
 
 `.pixcode` 是 PixCode 能力的唯一事实来源，不采用任何单一 Agent 宿主的发现目录作为核心目录。Codex、Claude Code 或其他宿主需要自动发现这些能力时，应通过各自的安装器或适配层进行映射；不得在仓库中复制一份长期并行维护的 rules 或 skills。
 

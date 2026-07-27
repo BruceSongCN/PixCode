@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { exists } from "../lib/project.mjs";
+import { frameworkAssetsRoot } from "../lib/runtime.mjs";
 
 export const HOSTS = {
   codex: ".codex",
@@ -48,7 +49,7 @@ export async function installHostAdapter(root, host, frameworkVersion) {
     throw new Error(`不支持的 Agent 宿主：${host}。可选值：${Object.keys(HOSTS).join("、")}。`);
   }
 
-  const sourceRoot = path.join(root, ".pixcode", "skills");
+  const sourceRoot = path.join(frameworkAssetsRoot, "skills");
   const sourceSkills = (await readdir(sourceRoot, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory() && entry.name.startsWith("pixcode-"))
     .map((entry) => entry.name);
@@ -74,7 +75,7 @@ export async function installHostAdapter(root, host, frameworkVersion) {
     const marker = {
       managedBy: "PixCode",
       frameworkVersion,
-      source: `.pixcode/skills/${skillName}`,
+      source: `PixCode:${path.relative(frameworkAssetsRoot, source).split(path.sep).join("/")}`,
       sourceHash: await sourceHash(source),
     };
     await writeFile(path.join(target, MARKER), `${JSON.stringify(marker, null, 2)}\n`, "utf8");
