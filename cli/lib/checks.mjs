@@ -4,7 +4,7 @@ import { exists } from "./project.mjs";
 import { resolveOpenSpec, runOpenSpec } from "../adapters/openspec.mjs";
 import { listHostAdapters } from "../adapters/agents.mjs";
 import { scaffoldMatchesRuntime } from "./scaffold.mjs";
-import { frameworkAssetsRoot } from "./runtime.mjs";
+import { frameworkAssetsRoot, frameworkRepositoryRoot } from "./runtime.mjs";
 
 function nodeVersionAtLeast(current, minimum) {
   const left = current.replace(/^v/, "").split(".").map(Number);
@@ -87,11 +87,6 @@ export async function doctor(root, config) {
       path.join(frameworkAssetsRoot, "scaffolds", "openspec", "config.yaml"),
       "PixCode runtime",
     ],
-    [
-      "工作区配置",
-      path.join(root, ".pixcode", "workspace.yaml"),
-      ".pixcode/workspace.yaml",
-    ],
     ["OpenSpec 配置", path.join(root, "openspec", "config.yaml"), "openspec/config.yaml"],
     [
       "默认 Schema",
@@ -112,6 +107,16 @@ export async function doctor(root, config) {
   ]) {
     checks.push({ ok: await exists(absolute), item, detail });
   }
+  checks.push({
+    ok:
+      path.resolve(root) === path.resolve(frameworkRepositoryRoot) ||
+      (await exists(path.join(root, "manifest.json"))),
+    item: "工作区配置",
+    detail:
+      path.resolve(root) === path.resolve(frameworkRepositoryRoot)
+        ? "框架仓库开发模式"
+        : "manifest.json",
+  });
   checks.push({
     ok: await scaffoldMatchesRuntime(root, config),
     item: "OpenSpec Schema 同步",

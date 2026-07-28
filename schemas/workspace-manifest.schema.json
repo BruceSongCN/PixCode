@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/BruceSongCN/PixCode/schemas/workspace-manifest.schema.json",
+  "title": "PixCode 工作区清单",
+  "description": "声明业务工作区身份以及各 Target 普通 Git 仓库的目录、远端和默认分支。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "workspace", "targets"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "用于编辑器补全和校验的 JSON Schema 路径。"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "description": "工作区清单格式版本。"
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "当前业务工作区的稳定名称。"
+        }
+      }
+    },
+    "targets": {
+      "type": "object",
+      "description": "Target 标识到普通独立 Git 仓库的映射。",
+      "propertyNames": {
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "repository"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^src/[^/]+$",
+            "description": "Target 在工作区内的相对目录。"
+          },
+          "repository": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Target Git 仓库远端地址。"
+          },
+          "defaultBranch": {
+            "type": "string",
+            "minLength": 1,
+            "description": "首次 bootstrap 时检出的默认分支。"
+          }
+        }
+      }
+    }
+  }
+}

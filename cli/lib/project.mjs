@@ -1,6 +1,5 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-import { parse } from "yaml";
 import { frameworkAssetsRoot } from "./runtime.mjs";
 
 export async function exists(filePath) {
@@ -16,15 +15,15 @@ export async function findProjectRoot(start = process.cwd()) {
   let current = path.resolve(start);
   while (true) {
     if (
-      (await exists(path.join(current, ".pixcode", "workspace.yaml"))) ||
-      (await exists(path.join(current, ".pixcode", "pixcode.json")))
+      (await exists(path.join(current, "manifest.json"))) ||
+      (await exists(path.join(current, "pixcode.json")))
     ) {
       return current;
     }
     const parent = path.dirname(current);
     if (parent === current) {
       throw new Error(
-        "未找到 .pixcode/workspace.yaml；请在 PixCode 工作区内执行，或先创建工作区配置。",
+        "未找到 manifest.json；请在 PixCode 工作区内执行，或先创建工作区清单。",
       );
     }
     current = parent;
@@ -37,13 +36,17 @@ export async function readPixCodeConfig() {
 }
 
 export async function readWorkspaceConfig(root) {
-  const filePath = path.join(root, ".pixcode", "workspace.yaml");
+  const filePath = path.join(root, "manifest.json");
   if (!(await exists(filePath))) {
-    return { schema_version: 1, name: path.basename(root), targets: {} };
+    return {
+      schemaVersion: 1,
+      workspace: { name: path.basename(root) },
+      targets: {},
+    };
   }
-  const config = parse(await readFile(filePath, "utf8")) ?? {};
-  if (config.schema_version !== 1) {
-    throw new Error(`不支持的 workspace.yaml schema_version：${config.schema_version}`);
+  const config = JSON.parse(await readFile(filePath, "utf8"));
+  if (config.schemaVersion !== 1) {
+    throw new Error(`不支持的 manifest.json schemaVersion：${config.schemaVersion}`);
   }
   if (!config.targets || typeof config.targets !== "object" || Array.isArray(config.targets)) {
     config.targets = {};

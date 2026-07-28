@@ -1,6 +1,6 @@
 {
-  "name": "pixcode-workspace",
-  "version": "0.5.0",
+  "name": "pixcode-framework",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,8 +11,8 @@
     "yaml": "2.8.2"
   },
   "scripts": {
-    "pixcode": "node .pixcode/cli/pixcode.mjs",
+    "pixcode": "node cli/pixcode.mjs",
     "test": "npm run test:pixcode",
-    "test:pixcode": "node --test .pixcode/cli/tests/*.test.mjs"
+    "test:pixcode": "node --test cli/tests/*.test.mjs"
   }
 }

@@ -22,20 +22,20 @@ PixCode（`Pi × Code`）是一套集成 OpenSpec 的轻量 AI 编程工程框�
 | 不归档而同步当前事实 | `$pixcode-workflow sync <change>` |
 | 验证完成后归档 | `$pixcode-workflow archive <change>` |
 
-未安装命令别名时，直接读取 `.pixcode/skills/` 下对应 `SKILL.md`。默认 Schema 为 `pixcode-delivery`，配置见 `openspec/config.yaml`。不得另建平行的 Feature/Change 状态机、编号系统、门禁清单或基线合并协议。
+未安装命令别名时，直接读取 `skills/` 下对应 `SKILL.md`。默认 Schema 为 `pixcode-delivery`。不得另建平行的 Feature/Change 状态机、编号系统、门禁清单或基线合并协议。
 
-所有确定性 PixCode 操作使用项目本地入口 `npm run --silent pixcode -- <command>`。不得依赖全局 `openspec` 命令；缺少依赖时提示执行 `npm ci`。`.pixcode/skills/` 是唯一 Skill 源，宿主适配副本通过 `pixcode adapters install|refresh` 生成。
+所有确定性 PixCode 操作使用项目本地入口 `npm run --silent pixcode -- <command>`。不得依赖全局 `openspec` 命令；缺少依赖时提示执行 `npm ci`。`skills/` 是唯一 Skill 源，宿主适配副本通过 `pixcode adapters install|refresh` 生成。
 
 ## 按需读取
 
-- AI 能力目录边界：`.pixcode/README.md`
-- 统一规格工作流：`.pixcode/skills/pixcode-workflow/SKILL.md`
-- 真实验证与证据：`.pixcode/skills/pixcode-verify-delivery/SKILL.md`
-- 任务分流与资产原则：`.pixcode/rules/直接任务与SPEC.md`
-- Change、Capability 与中文资产标题：`.pixcode/rules/OpenSpec资产命名.md`
-- 归档后的当前态功能规格：`.pixcode/rules/当前态功能规格.md`
-- 多仓库、多 Target 协作：`.pixcode/rules/多目标交付.md`
-- 测试计划、执行和证据：`.pixcode/rules/测试与证据.md`
+- AI 能力目录边界：`docs/框架结构.md`
+- 统一规格工作流：`skills/pixcode-workflow/SKILL.md`
+- 真实验证与证据：`skills/pixcode-verify-delivery/SKILL.md`
+- 任务分流与资产原则：`rules/直接任务与SPEC.md`
+- Change、Capability 与中文资产标题：`rules/OpenSpec资产命名.md`
+- 归档后的当前态功能规格：`rules/当前态功能规格.md`
+- 多仓库、多 Target 协作：`rules/多目标交付.md`
+- 测试计划、执行和证据：`rules/测试与证据.md`
 - 具体代码风格、构建和测试命令：目标 `src/<target>/` 仓库内最接近的规则文件
 
 ## 不可绕过的边界

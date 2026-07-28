@@ -54,7 +54,7 @@ function normalizeTargets(root, workspace) {
       path: relative.split(path.sep).join("/"),
       directory,
       repository: target.repository,
-      expectedBranch: target.branch ?? null,
+      expectedBranch: target.defaultBranch ?? null,
     };
   });
 }

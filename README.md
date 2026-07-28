@@ -2,7 +2,7 @@
 
 PixCode（`Pi × Code`）是一套轻量、Agent 中立的 AI 编程工程驱动框架。它对外提供统一的规格与交付工作流，内部集成项目本地 [OpenSpec](https://github.com/Fission-AI/OpenSpec) 引擎，不要求用户全局安装或直接操作 OpenSpec。
 
-业务项目建议把本仓库固定为 `.pixcode/runtime` Git Submodule，并在业务仓库自己的 `.pixcode/workspace.yaml` 中维护 Target 仓库清单。Target 仍是普通独立克隆，由 `pixcode targets bootstrap|status` 管理，不作为 submodule 嵌套。
+业务项目把本仓库直接固定为 `.pixcode` Git Submodule，并在业务仓库根目录用 `manifest.json` 维护 Target 仓库清单。Target 仍是普通独立克隆，由 `pixcode targets bootstrap|status` 管理，不作为 submodule 嵌套。
 
 PixCode 重点补充 OpenSpec 未覆盖的工程语境：
 
@@ -15,30 +15,19 @@ PixCode 重点补充 OpenSpec 未覆盖的工程语境：
 ## 目录
 
 ```text
-.
-├─ .pixcode/                      # PixCode 唯一能力源
-│  ├─ cli/                        # 项目本地 CLI
-│  ├─ rules/                      # 通用 AI 行为规则
-│  ├─ skills/                     # 工具中立 Skill
-│  ├─ scaffolds/openspec/         # init 时生成 OpenSpec 运行目录
-│  ├─ templates/                  # 当前态功能规格归档模板
-│  └─ pixcode.json                # 框架与引擎版本
-├─ openspec/                      # pixcode init 后生成；不属于纯框架源码
-│  ├─ config.yaml                 # 当前项目的规格配置
-│  ├─ schemas/pixcode-delivery/   # PixCode Schema 运行副本
-│  ├─ specs/                      # 已生效的当前需求事实
-│  └─ changes/                    # 当前项目的活动变更与归档
-├─ pix-specs/                     # 归档后生成的当前完整功能规格
-├─ src/                           # 独立 Target 代码仓库
-├─ package.json                   # 本地 OpenSpec 依赖与 PixCode 入口
-└─ package-lock.json              # 可重复安装的依赖锁
+PixCode/
+├─ cli/                           # 项目本地 CLI
+├─ rules/                         # 通用 AI 行为规则
+├─ skills/                        # 工具中立 Skill
+├─ scaffolds/openspec/            # init 时生成 OpenSpec 运行目录
+├─ templates/                     # 当前态功能规格归档模板
+├─ schemas/                       # 工作区 Manifest 等机器契约
+└─ pixcode.json                   # 框架与引擎版本
 ```
 
-`.pixcode/skills/` 是 Skill 的唯一事实来源。`.codex/`、`.claude/`、`.opencode/` 下的 PixCode Skill 由 CLI 生成，带管理标记，可安全刷新，不应手工维护。
+安装到业务项目后，上述目录整体位于 `.pixcode/`。`skills/` 是 Skill 的唯一事实来源，宿主适配目录中的副本不应手工维护。
 
-`src/README.md` 随框架版本管理，`src/*/` 下接入的业务 Target 则保持为独立仓库。
-
-PixCode 框架仓库只提供 `.pixcode/scaffolds/openspec/` 中的初始化源，不直接携带根目录 `openspec/`。执行 `pixcode init` 后生成的配置、Schema 运行副本、Change、Spec、归档、`pix-specs/` 和验证证据都属于具体项目，应由项目仓库版本管理，不回流到纯框架发行仓库。`history/` 仅用于本机备份，始终排除。
+PixCode 框架仓库只提供 `scaffolds/openspec/` 中的初始化源，不携带具体项目的 `openspec/`、`pix-specs/` 或 `src/`。这些内容均由使用框架的业务仓库管理。
 
 ## 快速开始
 

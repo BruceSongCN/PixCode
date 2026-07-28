@@ -20,8 +20,8 @@ import {
 import { assertChangeId, exists, parseFlags } from "../lib/project.mjs";
 import { listTargets, targetStatus } from "../lib/targets.mjs";
 
-const testRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const cliPath = path.join(testRoot, ".pixcode", "cli", "pixcode.mjs");
+const testRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const cliPath = path.join(testRoot, "cli", "pixcode.mjs");
 
 function runCli(args, cwd) {
   return new Promise((resolve, reject) => {
@@ -81,17 +81,23 @@ test("工作区清单声明普通独立仓库而不要求 Git submodule", async 
   context.after(async () => {
     await rm(root, { recursive: true, force: true });
   });
-  await mkdir(path.join(root, ".pixcode"), { recursive: true });
   await writeFile(
-    path.join(root, ".pixcode", "workspace.yaml"),
-    `schema_version: 1
-name: Demo
-targets:
-  backend:
-    path: src/backend
-    repository: https://example.com/backend.git
-    branch: main
-`,
+    path.join(root, "manifest.json"),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        workspace: { name: "Demo" },
+        targets: {
+          backend: {
+            path: "src/backend",
+            repository: "https://example.com/backend.git",
+            defaultBranch: "main",
+          },
+        },
+      },
+      null,
+      2,
+    )}\n`,
     "utf8",
   );
 
@@ -196,12 +202,6 @@ test("Agent 适配可安装和刷新受管理 Skill", async (context) => {
   context.after(async () => {
     await rm(root, { recursive: true, force: true });
   });
-  await mkdir(path.join(root, ".pixcode"), { recursive: true });
-  await mkdir(path.join(root, ".pixcode", "skills"), { recursive: true });
-  const sourceSkills = path.join(testRoot, ".pixcode", "skills");
-  const { cp } = await import("node:fs/promises");
-  await cp(sourceSkills, path.join(root, ".pixcode", "skills"), { recursive: true });
-
   const installed = await installHostAdapter(root, "codex", "0.1.0");
   assert.equal(installed.installed.length, 2);
   const markerPath = path.join(
@@ -224,11 +224,6 @@ test("Agent 适配不覆盖未受管理的同名 Skill", async (context) => {
   context.after(async () => {
     await rm(root, { recursive: true, force: true });
   });
-  const { cp } = await import("node:fs/promises");
-  await mkdir(path.join(root, ".pixcode"), { recursive: true });
-  await cp(path.join(testRoot, ".pixcode", "skills"), path.join(root, ".pixcode", "skills"), {
-    recursive: true,
-  });
   const unmanaged = path.join(root, ".codex", "skills", "pixcode-workflow");
   await mkdir(unmanaged, { recursive: true });
   await writeFile(path.join(unmanaged, "SKILL.md"), "user-owned\n", "utf8");
@@ -250,25 +245,19 @@ test("CLI 可在新工作区创建并查询 Change", async (context) => {
     await rm(root, { recursive: true, force: true });
   });
   const { cp } = await import("node:fs/promises");
-  await mkdir(path.join(root, ".pixcode"), { recursive: true });
   await writeFile(
-    path.join(root, ".pixcode", "workspace.yaml"),
-    "schema_version: 1\nname: Test\ntargets: {}\n",
+    path.join(root, "manifest.json"),
+    "{\"schemaVersion\":1,\"workspace\":{\"name\":\"Test\"},\"targets\":{}}\n",
     "utf8",
-  );
-  await cp(
-    path.join(testRoot, ".pixcode", "pixcode.json"),
-    path.join(root, ".pixcode", "pixcode.json"),
   );
   await mkdir(path.join(root, "openspec", "schemas"), { recursive: true });
   await cp(
-    path.join(testRoot, ".pixcode", "scaffolds", "openspec", "config.yaml"),
+    path.join(testRoot, "scaffolds", "openspec", "config.yaml"),
     path.join(root, "openspec", "config.yaml"),
   );
   await cp(
     path.join(
       testRoot,
-      ".pixcode",
       "scaffolds",
       "openspec",
       "schemas",
@@ -301,31 +290,10 @@ test("pixcode init 从框架脚手架生成 OpenSpec 项目目录并保留项目
   context.after(async () => {
     await rm(root, { recursive: true, force: true });
   });
-  const { cp } = await import("node:fs/promises");
-  await mkdir(path.join(root, ".pixcode"), { recursive: true });
   await writeFile(
-    path.join(root, ".pixcode", "workspace.yaml"),
-    "schema_version: 1\nname: Test\ntargets: {}\n",
+    path.join(root, "manifest.json"),
+    "{\"schemaVersion\":1,\"workspace\":{\"name\":\"Test\"},\"targets\":{}}\n",
     "utf8",
-  );
-  await cp(
-    path.join(testRoot, ".pixcode", "pixcode.json"),
-    path.join(root, ".pixcode", "pixcode.json"),
-  );
-  await cp(
-    path.join(testRoot, ".pixcode", "skills"),
-    path.join(root, ".pixcode", "skills"),
-    { recursive: true },
-  );
-  await cp(
-    path.join(testRoot, ".pixcode", "scaffolds"),
-    path.join(root, ".pixcode", "scaffolds"),
-    { recursive: true },
-  );
-  await cp(
-    path.join(testRoot, ".pixcode", "templates"),
-    path.join(root, ".pixcode", "templates"),
-    { recursive: true },
   );
   await mkdir(path.join(root, "src"), { recursive: true });
 
@@ -358,7 +326,6 @@ test("当前态功能资产支持多级中文路径并保留 OpenSpec 映射", a
   context.after(async () => {
     await rm(root, { recursive: true, force: true });
   });
-  const { cp } = await import("node:fs/promises");
   const config = {
     publication: {
       root: "pix-specs",
@@ -366,12 +333,6 @@ test("当前态功能资产支持多级中文路径并保留 OpenSpec 映射", a
       templateVersion: 1,
     },
   };
-  await mkdir(path.join(root, ".pixcode", "templates"), { recursive: true });
-  await cp(
-    path.join(testRoot, ".pixcode", "templates", "capability-baseline"),
-    path.join(root, ".pixcode", "templates", "capability-baseline"),
-    { recursive: true },
-  );
   const archiveName = "2026-07-27-supply-general-approval";
   const archive = path.join(root, "openspec", "changes", "archive", archiveName);
   await mkdir(path.join(archive, "artifacts"), { recursive: true });
