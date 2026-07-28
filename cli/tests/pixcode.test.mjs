@@ -499,6 +499,9 @@ test("pixcode init 从框架脚手架生成 OpenSpec 项目目录并保留项目
   assert.equal(initializedAgain.code, 0, initializedAgain.stderr || initializedAgain.stdout);
   assert.equal(await readFile(configPath, "utf8"), projectConfig);
   assert.equal(await scaffoldMatchesRuntime(root, config), true);
+  const initializedThird = await runCli(["init", "--agent", "none", "--json"], root);
+  assert.equal(initializedThird.code, 0, initializedThird.stderr || initializedThird.stdout);
+  assert.equal(JSON.parse(initializedThird.stdout).scaffold.schema.refreshed, false);
 });
 
 test("pixcode init 不覆盖同名但未受管理的 Schema", async (context) => {

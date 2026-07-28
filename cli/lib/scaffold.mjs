@@ -28,6 +28,7 @@ export async function installOpenSpecScaffold(root, config) {
   }
 
   const existingMarker = path.join(targetSchema, ".pixcode-managed.json");
+  let schemaRefreshed = false;
   if (await exists(targetSchema)) {
     if (!(await exists(existingMarker))) {
       throw new Error(
@@ -38,32 +39,39 @@ export async function installOpenSpecScaffold(root, config) {
     if (marker.managedBy !== "PixCode") {
       throw new Error(`拒绝刷新不受 PixCode 管理的 Schema：${targetSchema}`);
     }
-    await rm(targetSchema, { recursive: true });
+    if (!(await scaffoldMatchesRuntime(root, config))) {
+      await rm(targetSchema, { recursive: true });
+      schemaRefreshed = true;
+    }
+  } else {
+    schemaRefreshed = true;
   }
-  await mkdir(path.dirname(targetSchema), { recursive: true });
-  await cp(sourceSchema, targetSchema, {
-    recursive: true,
-    force: true,
-    errorOnExist: false,
-  });
-  refreshed.push(path.relative(root, targetSchema));
 
   const markerPath = path.join(targetSchema, ".pixcode-managed.json");
-  await writeFile(
-    markerPath,
-    `${JSON.stringify(
-      {
-        managedBy: "PixCode",
-        frameworkVersion: config.frameworkVersion,
-        source: `PixCode:${path.relative(frameworkAssetsRoot, sourceSchema)
-          .split(path.sep)
-          .join("/")}`,
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
+  if (schemaRefreshed) {
+    await mkdir(path.dirname(targetSchema), { recursive: true });
+    await cp(sourceSchema, targetSchema, {
+      recursive: true,
+      force: true,
+      errorOnExist: false,
+    });
+    await writeFile(
+      markerPath,
+      `${JSON.stringify(
+        {
+          managedBy: "PixCode",
+          frameworkVersion: config.frameworkVersion,
+          source: `PixCode:${path.relative(frameworkAssetsRoot, sourceSchema)
+            .split(path.sep)
+            .join("/")}`,
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    refreshed.push(path.relative(root, targetSchema));
+  }
 
   return {
     source,
@@ -75,7 +83,7 @@ export async function installOpenSpecScaffold(root, config) {
     },
     schema: {
       path: targetSchema,
-      refreshed: true,
+      refreshed: schemaRefreshed,
       marker: markerPath,
     },
     created,
