@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/BruceSongCN/PixCode/schemas/workspace-local.schema.json",
   "title": "PixCode 个人工作区配置",
-  "description": "声明当前开发者的本地或远程调试选择。该文件应保存为工作区根目录 workspace.local.json，并始终排除在 Git 之外。",
+  "description": "声明当前开发者的本地或远程执行与调试选择。该文件应保存为工作区根目录 workspace.local.json，并始终排除在 Git 之外。",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "debug"],
@@ -22,7 +22,7 @@
       "properties": {
         "mode": {
           "enum": ["local", "remote"],
-          "description": "默认调试模式。local 在当前电脑执行；remote 使用下方远程环境。"
+          "description": "默认运行态执行与调试模式。local 在当前电脑执行；remote 的部署后调试、集成和真实验证以下方远程环境为准。"
         },
         "fallback": {
           "const": "disabled",

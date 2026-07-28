@@ -69,7 +69,11 @@ npm run --silent pixcode -- capabilities validate
 
 ### apply
 
-确认 `review.md` 已真实通过且没有未关闭阻断问题，再读取 proposal、specs、design、test-plan 和 tasks，按依赖及 Target 分仓实现并勾选任务。若实现需要改变已确认业务语义或共享契约，停止并转入 update 和 review。
+1. 先执行 `npm run --silent pixcode -- debug gate apply --json`，读取实际执行模式、目标环境和门禁要求；门禁失败时停止，不得静默切换环境。
+2. 确认 `review.md` 已真实通过且没有未关闭阻断问题，再读取 proposal、specs、design、test-plan 和 tasks，按依赖及 Target 分仓实现并勾选任务。
+3. `remote` 模式表示运行态调试、迁移、集成检查和真实服务确认以配置的远端环境为准。本地构建和单元测试可以先执行，但不得替代远端结果或被表述为“已远端调试”。
+4. 部署、重启、远端迁移等写操作必须同时满足：用户已授权、项目已声明安全入口、目标不是生产或未经授权的共享环境。缺少任一条件时暂停相关步骤并明确报告，不自行把“远端调试”缩减为“本地程序连接远端数据库”。
+5. 若实现需要改变已确认业务语义或共享契约，停止并转入 update 和 review。
 
 ### sync
 

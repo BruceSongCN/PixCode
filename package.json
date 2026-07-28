@@ -1,6 +1,6 @@
 {
   "name": "pixcode-framework",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "轻量、Agent 中立、集成 OpenSpec 的 AI 编程工程驱动框架",
   "private": true,
   "type": "module",

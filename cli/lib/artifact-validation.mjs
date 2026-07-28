@@ -178,6 +178,31 @@ export function validateVerificationDocument(content, label = "verification") {
     errors.push(`交付决定尚未通过（当前：${deliveryDecision || "未填写"}）`);
   }
 
+  if (accepted.has(validationStatus) || accepted.has(deliveryDecision)) {
+    const environment = section(content, "执行环境声明");
+    const requiredEnvironmentFields = [
+      "执行模式 / 配置来源",
+      "主机 / 工作区 / Runtime",
+      "实际服务入口",
+      "部署标识 / 版本",
+      "契约 / 构建指纹",
+    ];
+    if (!environment) {
+      errors.push("正向交付结论必须包含“执行环境声明”。");
+    } else {
+      for (const field of requiredEnvironmentFields) {
+        const row = environment
+          .split(/\r?\n/)
+          .map(splitRow)
+          .find((cells) => cells[0] === field);
+        const value = row?.[1]?.trim() ?? "";
+        if (!value || /<[^>]+>/.test(value) || /local\s*\/\s*remote/.test(value)) {
+          errors.push(`执行环境声明缺少有效的“${field}”`);
+        }
+      }
+    }
+  }
+
   for (const line of content.split(/\r?\n/)) {
     const cells = splitRow(line);
     if (
@@ -238,6 +263,41 @@ export async function validateModelArtifacts(root, config, target) {
         ...validateModelDocument(content, `${change}:design-model`),
       });
     }
+  }
+  return checks;
+}
+
+export async function validateVerificationArtifacts(root, config, target) {
+  let changes;
+  if (target) {
+    changes = [target];
+  } else {
+    const listed = parseOpenSpecJson(
+      await runOpenSpec(["list", "--json"], {
+        cwd: root,
+        expectedVersion: config.engine.version,
+      }),
+    );
+    changes = (listed.changes ?? []).map((change) => change.name);
+  }
+
+  const checks = [];
+  for (const change of changes) {
+    const status = parseOpenSpecJson(
+      await runOpenSpec(["status", "--change", change, "--json"], {
+        cwd: root,
+        expectedVersion: config.engine.version,
+      }),
+    );
+    const verificationPath =
+      status.artifactPaths?.verification?.existingOutputPaths?.[0];
+    if (!verificationPath) continue;
+    checks.push(
+      validateVerificationDocument(
+        await readFile(verificationPath, "utf8"),
+        `${change}:verification`,
+      ),
+    );
   }
   return checks;
 }

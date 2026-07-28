@@ -13,6 +13,7 @@ import {
   validateVerificationDocument,
 } from "../lib/artifact-validation.mjs";
 import {
+  gateExecutionEnvironment,
   readWorkspaceLocalConfig,
   resolveDebugConfig,
   setDebugMode,
@@ -260,6 +261,32 @@ test("debug status 对缺少连接参数的 remote 模式明确失败", async (c
   assert.match(output.error, /未提供 debug\.remote/);
 });
 
+test("debug gate 把执行模式转换为 apply 和 verify 的强制约束", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-debug-gate-"));
+  context.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  await writeFile(
+    path.join(root, "manifest.json"),
+    '{"schemaVersion":1,"workspace":{"name":"Demo"},"targets":{}}\n',
+    "utf8",
+  );
+
+  const apply = await gateExecutionEnvironment(root, "apply", { env: {} });
+  assert.equal(apply.ok, true);
+  assert.equal(apply.mode, "local");
+  assert.match(apply.requirements.join("\n"), /明确选择 local/);
+
+  const verify = await runCli(["debug", "gate", "verify", "--json"], root);
+  assert.equal(verify.code, 0, verify.stderr || verify.stdout);
+  assert.equal(JSON.parse(verify.stdout).phase, "verify");
+
+  await assert.rejects(
+    () => gateExecutionEnvironment(root, "deploy", { env: {} }),
+    /只能是 apply 或 verify/,
+  );
+});
+
 test("工作区清单严格拒绝未知字段", async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-manifest-"));
   context.after(async () => {
@@ -433,6 +460,17 @@ test("设计评审只有真实通过且无未关闭阻断问题时才允许交�
 });
 
 test("交付验证必须给出正向结论且不存在未执行项", () => {
+  const environment = [
+    "## 执行环境声明",
+    "",
+    "| 项目 | 内容 |",
+    "| --- | --- |",
+    "| 执行模式 / 配置来源 | remote / workspace.local.json |",
+    "| 主机 / 工作区 / Runtime | dev / /srv/demo / docker-compose |",
+    "| 实际服务入口 | http://dev.example.test |",
+    "| 部署标识 / 版本 | image:demo-123 |",
+    "| 契约 / 构建指纹 | sha256:abc123 |",
+  ].join("\n");
   assert.equal(
     validateVerificationDocument(
       "| 验证状态 | 待执行 |\n| 交付决定 | 待验收 |\n",
@@ -448,6 +486,12 @@ test("交付验证必须给出正向结论且不存在未执行项", () => {
   assert.equal(
     validateVerificationDocument(
       "| 验证状态 | 通过 |\n| 交付决定 | 通过 |\n",
+    ).ok,
+    false,
+  );
+  assert.equal(
+    validateVerificationDocument(
+      `| 验证状态 | 通过 |\n| 交付决定 | 通过 |\n\n${environment}\n`,
     ).ok,
     true,
   );

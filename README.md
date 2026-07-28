@@ -63,6 +63,8 @@ npm run --silent pixcode -- capabilities finalize <归档目录名>
 npm run --silent pixcode -- capabilities validate
 npm run --silent pixcode -- debug status
 npm run --silent pixcode -- debug doctor
+npm run --silent pixcode -- debug gate apply
+npm run --silent pixcode -- debug gate verify
 ```
 
 规格内容和当前态语义合并仍由 Agent 按 Skill、规则、Schema 和模板理解后生成；CLI 只承担初始化、状态、校验、归档、映射、索引和宿主适配等确定性工作，不用硬编码代替 Agent 的业务判断。

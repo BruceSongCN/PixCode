@@ -7,6 +7,7 @@ import { frameworkAssetsRoot } from "./runtime.mjs";
 
 const LOCAL_CONFIG_NAME = "workspace.local.json";
 const VALID_MODES = new Set(["local", "remote"]);
+const VALID_GATE_PHASES = new Set(["apply", "verify"]);
 let validator;
 
 function formatError(error) {
@@ -224,4 +225,45 @@ export async function diagnoseDebugEnvironment(root, options = {}) {
       : connection.stderr || connection.stdout || `SSH 退出码 ${connection.code}`,
   });
   return { ok: checks.every((check) => check.ok), config: resolved, checks };
+}
+
+export async function gateExecutionEnvironment(root, phase, options = {}) {
+  if (!VALID_GATE_PHASES.has(phase)) {
+    throw new Error(
+      `执行门禁阶段只能是 apply 或 verify，当前值为 ${phase || "空"}。`,
+    );
+  }
+  const diagnosis = await diagnoseDebugEnvironment(root, options);
+  const remote = diagnosis.config.mode === "remote";
+  const requirements = remote
+    ? phase === "apply"
+      ? [
+          "运行态调试、迁移和集成检查必须在已配置的远端环境执行；本地结果只能作为辅助检查。",
+          "部署或重启属于远端写操作，必须使用项目声明的入口并确认已获用户授权；缺少入口或授权时暂停。",
+          "不得因远端不可用而切换到本地并声称完成远端调试。",
+        ]
+      : [
+          "交付验证必须命中已配置的远端环境及其真实服务；本地服务结果不能替代远端证据。",
+          "verification.md 必须记录执行模式、远端主机/工作区、实际服务地址、部署标识或版本以及可复核的契约或构建指纹。",
+          "无法确认远端已部署当前实现时，相关场景必须标记为未执行或失败，不得判定通过。",
+        ]
+    : [
+        `当前明确选择 local；${phase === "apply" ? "运行态实现检查" : "交付验证"}应在本机执行并记录实际入口。`,
+      ];
+  return {
+    ok: diagnosis.ok,
+    phase,
+    mode: diagnosis.config.mode,
+    source: diagnosis.config.source,
+    target:
+      remote && diagnosis.config.remote
+        ? {
+            host: diagnosis.config.remote.host,
+            workspace: diagnosis.config.remote.workspace,
+            runtime: diagnosis.config.remote.runtime,
+          }
+        : { host: "local" },
+    checks: diagnosis.checks,
+    requirements,
+  };
 }

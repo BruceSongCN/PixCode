@@ -7,12 +7,14 @@ import { parseOpenSpecJson, runOpenSpec } from "./adapters/openspec.mjs";
 import { doctor, validateSkills } from "./lib/checks.mjs";
 import {
   diagnoseDebugEnvironment,
+  gateExecutionEnvironment,
   resolveDebugConfig,
   setDebugMode,
 } from "./lib/debug-config.mjs";
 import {
   validateModelArtifacts,
   validateReviewDocument,
+  validateVerificationArtifacts,
   validateVerificationDocument,
 } from "./lib/artifact-validation.mjs";
 import {
@@ -53,6 +55,7 @@ const HELP = `PixCode 轻量 AI 工程驱动器
   pixcode debug status [--mode local|remote] [--json]
   pixcode debug use <local|remote> [--json]
   pixcode debug doctor [--mode local|remote] [--json]
+  pixcode debug gate <apply|verify> [--mode local|remote] [--json]
   pixcode adapters install <codex|claude|opencode>
   pixcode adapters refresh
   pixcode adapters list [--json]
@@ -109,6 +112,7 @@ async function validate(root, config, positional, flags) {
   const target = positional[0];
   if (target) assertChangeId(target);
   const modelChecks = await validateModelArtifacts(root, config, target);
+  const verificationChecks = await validateVerificationArtifacts(root, config, target);
   const validationArgs = target ? ["validate", target, "--strict"] : ["validate", "--all", "--strict"];
   const changes = await runOpenSpec(validationArgs, {
     cwd: root,
@@ -119,11 +123,13 @@ async function validate(root, config, positional, flags) {
     ok:
       skillChecks.every((check) => check.ok) &&
       modelChecks.every((check) => check.ok) &&
+      verificationChecks.every((check) => check.ok) &&
       capabilities.ok &&
       schema.ok &&
       changes.ok,
     skills: skillChecks,
     models: modelChecks,
+    verifications: verificationChecks,
     capabilities,
     schema: { ok: schema.ok, stdout: schema.stdout, stderr: schema.stderr },
     changes: { ok: changes.ok, stdout: changes.stdout, stderr: changes.stderr },
@@ -137,6 +143,13 @@ async function validate(root, config, positional, flags) {
     for (const check of modelChecks) {
       console.log(
         `${check.ok ? "✓" : "✗"} 模型字段 ${check.change}: ${
+          check.ok ? "有效" : check.errors.join("；")
+        }`,
+      );
+    }
+    for (const check of verificationChecks) {
+      console.log(
+        `${check.ok ? "✓" : "✗"} 交付验证 ${check.label}: ${
           check.ok ? "有效" : check.errors.join("；")
         }`,
       );
@@ -467,6 +480,28 @@ export async function main(argv = process.argv.slice(2)) {
       else {
         for (const check of result.checks) {
           console.log(`${check.ok ? "✓" : "✗"} ${check.item}: ${check.detail}`);
+        }
+      }
+      if (!result.ok) process.exitCode = 1;
+      return;
+    }
+    if (action === "gate") {
+      assertInvocation("debug gate", positional, flags, {
+        minimum: 2,
+        maximum: 2,
+        flags: ["mode", "json"],
+      });
+      const result = await gateExecutionEnvironment(root, positional[1], {
+        cliMode: flags.mode,
+        env: process.env,
+      });
+      if (flags.json) output(result, true);
+      else {
+        for (const check of result.checks) {
+          console.log(`${check.ok ? "✓" : "✗"} ${check.item}: ${check.detail}`);
+        }
+        for (const requirement of result.requirements) {
+          console.log(`→ ${requirement}`);
         }
       }
       if (!result.ok) process.exitCode = 1;

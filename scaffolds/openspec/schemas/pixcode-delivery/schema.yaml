@@ -113,7 +113,9 @@ artifacts:
     template: 070-verification.md
     instruction: |
       仅依据真实执行结果填写，不得把计划或推断写成已通过。
+      开始验证前执行 `pixcode debug gate verify`；按其执行模式绑定真实目标环境，禁止静默回退。
       按 Target 汇总命令、环境、结果和证据，并追溯 Requirement 与 Scenario。
+      正向结论必须完整记录执行模式与来源、主机/工作区/Runtime、实际服务入口、部署标识或版本、契约或构建指纹。
       未执行或失败项目必须显式列出原因、影响和后续动作。
       在同一文件中记录验收范围、偏差处理和最终交付决定；不得提前标记通过。
     requires:
@@ -125,6 +127,7 @@ apply:
     - tasks
   tracks: tasks.md
   instruction: |
+    开始实现前执行 `pixcode debug gate apply`；remote 模式下本地结果不得替代远端运行态调试。
     开始实现前确认 review.md 已真实通过，且不存在未关闭阻断问题。
     按 tasks.md 的依赖顺序实现并及时勾选。
     开始每个 Target 前读取其仓库规则；保持共享契约与 specs 一致。

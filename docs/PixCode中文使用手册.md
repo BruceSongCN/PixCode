@@ -168,9 +168,13 @@ npm run --silent pixcode -- debug status
 npm run --silent pixcode -- debug use local
 npm run --silent pixcode -- debug use remote
 npm run --silent pixcode -- debug doctor
+npm run --silent pixcode -- debug gate apply
+npm run --silent pixcode -- debug gate verify
 ```
 
 优先级为 `--mode`、`PIXCODE_DEBUG_MODE`、`workspace.local.json`、默认 `local`。远程不可用时明确失败，不静默改为本地执行。
+
+`status` 只解析配置，`doctor` 只做只读连通性和 Runtime 诊断；`gate apply|verify` 则把执行模式转换成实现或验证阶段的强制边界。`remote` 表示部署后的调试、迁移、集成和真实服务验证必须以配置的远端环境为准，本地程序连接远端数据库不等于远端调试。PixCode 不通用化项目部署命令，也不会自动取得远端写权限；部署入口应由项目规则声明，Agent 只能在用户授权范围内执行。缺少入口或授权时必须暂停，不得用本地结果声称远端完成。
 
 ## 4. 什么时候使用 SPEC
 
@@ -308,12 +312,14 @@ $pixcode-workflow apply warehouse-offline-inventory
 
 实现时：
 
+- 首先执行 `npm run --silent pixcode -- debug gate apply --json`；
 - 读取 change 的全部规划资产；
 - 按 `tasks.md` 的依赖顺序推进；
 - 分别进入 `src/<target>/` 独立仓库读取规则、检查状态、修改和验证；
 - 完成任务后勾选对应任务；
 - 不用代码猜测替代缺失的业务决定；
 - 如需改变已确认业务语义，停止实现并先修订 change。
+- remote 模式下，获授权部署并确认真实远端服务是完成运行态调试的必要条件；本地结果只能作为辅助检查。
 
 ### 5.5 验证
 
@@ -328,6 +334,8 @@ $pixcode-verify-delivery warehouse-offline-inventory
 - 契约、集成与端到端验证；
 - 环境、资源角色和数据特征绑定；
 - 命令、时间、退出码、关键输出与证据索引。
+
+验证首先执行 `npm run --silent pixcode -- debug gate verify --json`。remote 模式下必须命中远端真实服务，并在 `verification.md` 记录主机/工作区、实际入口、部署标识或版本、OpenAPI 或构建指纹；无法确认部署当前实现时不得判定通过。`pixcode validate` 会确定性检查正向结论是否完整声明这些执行环境事实。
 
 大型证据放在：
 
@@ -474,6 +482,7 @@ pixcode targets bootstrap [--json]
 pixcode debug status [--mode local|remote] [--json]
 pixcode debug use <local|remote> [--json]
 pixcode debug doctor [--mode local|remote] [--json]
+pixcode debug gate <apply|verify> [--mode local|remote] [--json]
 pixcode adapters install <codex|claude|opencode>
 pixcode adapters refresh
 pixcode adapters list [--json]
