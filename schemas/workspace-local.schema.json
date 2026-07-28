@@ -50,6 +50,24 @@
           }
         }
       ]
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile"],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "description": "选择 manifest.json 中声明的验证 Profile。未填写时使用项目默认 Profile。"
+        },
+        "databasePort": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "description": "个人隔离数据库映射到远端主机回环地址的端口；不得对外网卡开放。"
+        }
+      }
     }
   },
   "$defs": {

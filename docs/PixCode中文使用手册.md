@@ -176,6 +176,8 @@ npm run --silent pixcode -- debug gate verify
 
 `status` 只解析配置，`doctor` 只做只读连通性和 Runtime 诊断；`gate apply|verify` 则把执行模式转换成实现或验证阶段的强制边界。`remote` 表示部署后的调试、迁移、集成和真实服务验证必须以配置的远端环境为准，本地程序连接远端数据库不等于远端调试。PixCode 不通用化项目部署命令，也不会自动取得远端写权限；部署入口应由项目规则声明，Agent 只能在用户授权范围内执行。缺少入口或授权时必须暂停，不得用本地结果声称远端完成。
 
+项目还可在 `manifest.json` 声明 `verification.profiles`，把验证模式、数据库隔离方式以及环境生命周期和分层测试命令作为共享事实；个人 `workspace.local.json` 只选择 Profile 和不含凭证的个人端口。门禁会拒绝 Profile 与调试模式不匹配，或“允许写数据库但未声明隔离”的配置。
+
 ## 4. 什么时候使用 SPEC
 
 默认直接处理：
@@ -334,6 +336,8 @@ $pixcode-verify-delivery warehouse-offline-inventory
 - 契约、集成与端到端验证；
 - 环境、资源角色和数据特征绑定；
 - 命令、时间、退出码、关键输出与证据索引。
+
+默认执行阶梯为 `Unit → Integration → Deploy → Remote Smoke → Full Regression`，性能测试按需追加。失败修复后先使用项目测试运行器的 `case`、`tag` 或 `from-case` 定向重跑；目标失败全部关闭后只执行一次完整回归。写数据库的验证必须先通过 Profile 的 `provision/reset/status` 入口准备隔离环境，并在结束时核对 fixture 零残留。
 
 验证首先执行 `npm run --silent pixcode -- debug gate verify --json`。remote 模式下必须命中远端真实服务，并在 `verification.md` 记录主机/工作区、实际入口、部署标识或版本、OpenAPI 或构建指纹；无法确认部署当前实现时不得判定通过。`pixcode validate` 会确定性检查正向结论是否完整声明这些执行环境事实。
 

@@ -55,6 +55,81 @@
           }
         }
       }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["defaultProfile", "profiles"],
+      "properties": {
+        "defaultProfile": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "description": "项目默认验证 Profile。"
+        },
+        "profiles": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/verificationProfile"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "verificationProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "debugMode",
+        "databaseIsolation",
+        "databaseWrites",
+        "commands"
+      ],
+      "properties": {
+        "debugMode": {
+          "enum": ["local", "remote"],
+          "description": "该 Profile 必须匹配的 PixCode 调试模式。"
+        },
+        "databaseIsolation": {
+          "enum": ["none", "dedicated-container", "shared-instance"],
+          "description": "数据库隔离方式。会写数据库的远端验证推荐 dedicated-container。"
+        },
+        "databaseWrites": {
+          "type": "boolean",
+          "description": "该 Profile 的集成或回归测试是否会写数据库。"
+        },
+        "commands": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "provision",
+            "reset",
+            "status",
+            "destroy",
+            "unit",
+            "integration",
+            "deploy",
+            "smoke",
+            "regression"
+          ],
+          "properties": {
+            "provision": { "type": "string", "minLength": 1 },
+            "reset": { "type": "string", "minLength": 1 },
+            "status": { "type": "string", "minLength": 1 },
+            "destroy": { "type": "string", "minLength": 1 },
+            "unit": { "type": "string", "minLength": 1 },
+            "integration": { "type": "string", "minLength": 1 },
+            "deploy": { "type": "string", "minLength": 1 },
+            "smoke": { "type": "string", "minLength": 1 },
+            "regression": { "type": "string", "minLength": 1 },
+            "performance": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
     }
   }
 }

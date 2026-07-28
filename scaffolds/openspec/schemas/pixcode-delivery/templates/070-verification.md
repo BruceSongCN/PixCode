@@ -13,6 +13,7 @@
 | 项目 | 内容 |
 | --- | --- |
 | 执行模式 / 配置来源 | `local / remote` / `<source>` |
+| 验证 Profile / 数据库隔离 | `<profile>` / `<none / dedicated-container / shared-instance>` |
 | 主机 / 工作区 / Runtime | `<host>` / `<workspace>` / `<runtime>` |
 | 实际服务入口 | `<URL 或不适用及依据>` |
 | 部署标识 / 版本 | `<镜像、提交、版本或不适用及依据>` |
@@ -20,9 +21,13 @@
 
 ## 执行摘要
 
-| Target / 范围 | 环境 | 命令或入口 | 结果 | 证据 |
-| --- | --- | --- | --- | --- |
-| `<target-id>` | <环境> | `<command>` | 通过 / 失败 / 未执行 | <相对路径或链接> |
+| 阶段 | Target / 范围 | 环境 | 命令或入口 | 耗时 | 结果 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Unit / Integration / Deploy / Smoke / Regression / Performance | `<target-id>` | <环境> | `<command>` | `<时长>` | 通过 / 失败 / 未执行 | <相对路径或链接> |
+
+## 定向重跑与完整回归
+
+<!-- 列出失败用例、case/tag/from-case 定向重跑结果，以及最后一次完整回归。不得用多次完整回归代替定位。 -->
 
 ## Requirement 与 Scenario 覆盖
 

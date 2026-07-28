@@ -14,6 +14,7 @@ npm run --silent pixcode -- debug gate verify --json
 ```
 
 把返回的执行模式和目标环境作为本轮验证边界。门禁失败时停止；`remote` 模式不得改用本地服务形成通过证据。
+若门禁返回验证 Profile，必须使用其中声明的数据库隔离和项目命令。会写数据库但 Profile 未声明隔离生命周期时停止。
 
 使用用户指定的 change；未指定时运行以下命令，只在唯一活动 change 可确定时继续：
 
@@ -34,7 +35,16 @@ npm run --silent pixcode -- status "<change>" --json
 
 ## 3. 执行验证
 
-先执行单 Target 最小验证，再执行适用的契约、集成和端到端场景。不得操作生产或未经授权的共享环境。
+按 `Unit → Integration → Deploy → Remote Smoke → Full Regression` 执行，性能测试仅在方案声明阈值或用户明确要求时追加。后一层不得替代前一层：
+
+- Unit 覆盖业务规则和边界，不依赖服务或数据库；
+- Integration 在隔离数据库上覆盖仓储、事务、迁移和约束；
+- Deploy 只部署已通过前两层的产物；
+- Remote Smoke 先确认部署版本、健康状态、契约和关键路径；
+- 失败修复后只按 `case`、`tag` 或 `from-case` 重跑目标用例；
+- 目标用例全部通过后只做一次 Full Regression。
+
+不得操作生产或未经授权的共享环境。写数据库前执行 Profile 的 `provision` 或 `reset`，结束后验证 fixture 零残留；凭证不得写入证据。
 
 `remote` 模式下：
 
@@ -59,6 +69,7 @@ openspec/changes/<change>/evidence/<target>/<run-id>/
 - 逐项关联 Requirement / Scenario、Target 和证据；
 - 显式列出失败、未执行、阻断原因、影响和后续动作；
 - 在“执行环境声明”中记录 gate 输出、实际服务入口、部署标识/版本和契约或构建指纹；不适用项写明依据；
+- 记录每一验证层的命令、耗时和结果，区分定向重跑与最终完整回归；
 - 结论只使用“通过”“有条件通过”或“不通过”。
 
 最后运行：

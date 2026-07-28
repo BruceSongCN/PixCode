@@ -287,6 +287,76 @@ test("debug gate 把执行模式转换为 apply 和 verify 的强制约束", asy
   );
 });
 
+test("debug gate 校验验证 Profile、执行模式和数据库隔离", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-verification-profile-"));
+  context.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  const manifest = {
+    schemaVersion: 1,
+    workspace: { name: "Demo" },
+    targets: {},
+    verification: {
+      defaultProfile: "local-isolated",
+      profiles: {
+        "local-isolated": {
+          debugMode: "local",
+          databaseIsolation: "dedicated-container",
+          databaseWrites: true,
+          commands: {
+            provision: "./scripts/test-env.ps1 provision",
+            reset: "./scripts/test-env.ps1 reset",
+            status: "./scripts/test-env.ps1 status",
+            destroy: "./scripts/test-env.ps1 destroy",
+            unit: "npm test -- unit",
+            integration: "npm test -- integration",
+            deploy: "npm run deploy",
+            smoke: "npm test -- smoke",
+            regression: "npm test -- regression",
+          },
+        },
+      },
+    },
+  };
+  await writeFile(
+    path.join(root, "manifest.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf8",
+  );
+  await writeFile(
+    path.join(root, "workspace.local.json"),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        debug: { mode: "local", fallback: "disabled" },
+        verification: { profile: "local-isolated", databasePort: 13360 },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+
+  const gate = await gateExecutionEnvironment(root, "verify", { env: {} });
+  assert.equal(gate.ok, true);
+  assert.equal(gate.verification.name, "local-isolated");
+  assert.equal(gate.verification.databaseIsolation, "dedicated-container");
+  assert.equal(gate.verification.databasePort, 13360);
+
+  manifest.verification.profiles["local-isolated"].debugMode = "remote";
+  await writeFile(
+    path.join(root, "manifest.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf8",
+  );
+  const mismatch = await gateExecutionEnvironment(root, "verify", { env: {} });
+  assert.equal(mismatch.ok, false);
+  assert.match(
+    mismatch.checks.find((check) => check.item === "Profile 执行模式").detail,
+    /要求 remote/,
+  );
+});
+
 test("工作区清单严格拒绝未知字段", async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-manifest-"));
   context.after(async () => {

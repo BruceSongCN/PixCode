@@ -11,6 +11,7 @@ PixCode 重点补充 OpenSpec 未覆盖的工程语境：
 - 多 Target、独立仓库与跨端协作规则；
 - 基于需求场景的真实验证和测试交接；
 - Git 忽略的个人本地/远程调试选择与环境诊断；
+- 可校验的验证 Profile、隔离数据库生命周期和分层回归策略；
 - Codex、Claude Code、OpenCode 等 Agent 宿主的可刷新 Skill 适配。
 
 ## 目录

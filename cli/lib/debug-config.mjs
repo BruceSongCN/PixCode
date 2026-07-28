@@ -2,7 +2,11 @@ import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
-import { ensureWorkspaceGitignore, exists } from "./project.mjs";
+import {
+  ensureWorkspaceGitignore,
+  exists,
+  readWorkspaceConfig,
+} from "./project.mjs";
 import { frameworkAssetsRoot } from "./runtime.mjs";
 
 const LOCAL_CONFIG_NAME = "workspace.local.json";
@@ -169,6 +173,14 @@ function quotePosix(value) {
 
 export async function diagnoseDebugEnvironment(root, options = {}) {
   const resolved = await resolveDebugConfig(root, options);
+  const manifest = await readWorkspaceConfig(root);
+  const local = await readWorkspaceLocalConfig(root);
+  const profileName =
+    local.config?.verification?.profile ??
+    manifest.verification?.defaultProfile;
+  const profile = profileName
+    ? manifest.verification?.profiles?.[profileName]
+    : undefined;
   const checks = [
     {
       ok: resolved.ready,
@@ -181,6 +193,48 @@ export async function diagnoseDebugEnvironment(root, options = {}) {
       detail: "disabled（远程不可用时不静默改为本地执行）",
     },
   ];
+  if (profileName) {
+    checks.push({
+      ok: Boolean(profile),
+      item: "验证 Profile",
+      detail: profile
+        ? `${profileName}（${profile.databaseIsolation}）`
+        : `${profileName} 未在 manifest.json 中声明`,
+    });
+    if (profile) {
+      checks.push({
+        ok: profile.debugMode === resolved.mode,
+        item: "Profile 执行模式",
+        detail:
+          profile.debugMode === resolved.mode
+            ? profile.debugMode
+            : `Profile 要求 ${profile.debugMode}，当前为 ${resolved.mode}`,
+      });
+      checks.push({
+        ok: !profile.databaseWrites || profile.databaseIsolation !== "none",
+        item: "数据库写入隔离",
+        detail: profile.databaseWrites
+          ? profile.databaseIsolation
+          : "只读或不访问数据库",
+      });
+      if (profile.databaseIsolation === "dedicated-container") {
+        checks.push({
+          ok: Number.isInteger(local.config?.verification?.databasePort),
+          item: "隔离数据库端口",
+          detail: Number.isInteger(local.config?.verification?.databasePort)
+            ? `remote-loopback:${local.config.verification.databasePort}`
+            : "workspace.local.json 未配置 verification.databasePort",
+        });
+      }
+    }
+  }
+  resolved.verification = profile
+    ? {
+        name: profileName,
+        ...profile,
+        databasePort: local.config?.verification?.databasePort,
+      }
+    : undefined;
 
   if (resolved.mode === "local" || !resolved.remote) {
     return { ok: checks.every((check) => check.ok), config: resolved, checks };
@@ -244,6 +298,8 @@ export async function gateExecutionEnvironment(root, phase, options = {}) {
         ]
       : [
           "交付验证必须命中已配置的远端环境及其真实服务；本地服务结果不能替代远端证据。",
+          "按 Unit → Integration → Deploy → Remote Smoke → Full Regression 的顺序执行；性能测试仅在明确需要时执行。",
+          "失败修复后先用 case/tag/from-case 定向重跑，全部定向问题关闭后只执行一次完整回归。",
           "verification.md 必须记录执行模式、远端主机/工作区、实际服务地址、部署标识或版本以及可复核的契约或构建指纹。",
           "无法确认远端已部署当前实现时，相关场景必须标记为未执行或失败，不得判定通过。",
         ]
@@ -264,6 +320,7 @@ export async function gateExecutionEnvironment(root, phase, options = {}) {
           }
         : { host: "local" },
     checks: diagnosis.checks,
+    verification: diagnosis.config.verification,
     requirements,
   };
 }
