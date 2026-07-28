@@ -10,6 +10,7 @@ import { resolveOpenSpec, runOpenSpec } from "../adapters/openspec.mjs";
 import {
   validateModelDocument,
   validateReviewDocument,
+  validateVerificationDocument,
 } from "../lib/artifact-validation.mjs";
 import {
   finalizeCapabilityPublication,
@@ -17,8 +18,17 @@ import {
   readPublicationMap,
   validateCapabilities,
 } from "../lib/capabilities.mjs";
-import { assertChangeId, exists, parseFlags } from "../lib/project.mjs";
-import { listTargets, targetStatus } from "../lib/targets.mjs";
+import {
+  assertChangeId,
+  exists,
+  parseFlags,
+  readWorkspaceConfig,
+} from "../lib/project.mjs";
+import {
+  installOpenSpecScaffold,
+  scaffoldMatchesRuntime,
+} from "../lib/scaffold.mjs";
+import { bootstrapTargets, listTargets, targetStatus } from "../lib/targets.mjs";
 
 const testRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const cliPath = path.join(testRoot, "cli", "pixcode.mjs");
@@ -50,6 +60,10 @@ test("OpenSpec 必须解析为项目本地锁定版本", async () => {
   const engine = await resolveOpenSpec("1.6.0");
   assert.equal(engine.version, "1.6.0");
   assert.match(engine.packageRoot, /node_modules[\\/]@fission-ai[\\/]openspec$/);
+  assert.equal(
+    path.relative(path.join(testRoot, "node_modules"), engine.packageRoot).startsWith(".."),
+    false,
+  );
 });
 
 test("清空 PATH 后仍可执行本地 OpenSpec", async () => {
@@ -74,6 +88,62 @@ test("命令参数同时解析位置参数与标志", () => {
     positional: ["demo-change"],
     flags: { json: true, agent: "codex" },
   });
+  assert.deepEqual(parseFlags(["--all", "--json"]), {
+    positional: [],
+    flags: { all: true, json: true },
+  });
+  assert.throws(() => parseFlags(["--force"]), /未知参数/);
+});
+
+test("CLI 拒绝把合法标志用于错误命令", async () => {
+  const result = await runCli(["doctor", "--all", "--json"], testRoot);
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /doctor 不支持参数：--all/);
+});
+
+test("workspace init 可从空目录生成最小工作区", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-workspace-"));
+  context.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const initialized = await runCli(
+    ["workspace", "init", "--name", "Demo Workspace", "--json"],
+    root,
+  );
+  assert.equal(initialized.code, 0, initialized.stderr || initialized.stdout);
+  const manifest = JSON.parse(await readFile(path.join(root, "manifest.json"), "utf8"));
+  assert.equal(manifest.workspace.name, "Demo Workspace");
+  assert.deepEqual(manifest.targets, {});
+  assert.equal(await exists(path.join(root, "src")), true);
+  assert.match(await readFile(path.join(root, ".gitignore"), "utf8"), /\/src\/\*\//);
+  const packageManifest = JSON.parse(
+    await readFile(path.join(root, "package.json"), "utf8"),
+  );
+  assert.equal(packageManifest.scripts.pixcode, "node .pixcode/cli/pixcode.mjs");
+
+  const repeated = await runCli(
+    ["workspace", "init", "--name", "Ignored", "--json"],
+    root,
+  );
+  assert.equal(repeated.code, 0, repeated.stderr || repeated.stdout);
+  assert.equal(
+    JSON.parse(await readFile(path.join(root, "manifest.json"), "utf8")).workspace.name,
+    "Demo Workspace",
+  );
+});
+
+test("工作区清单严格拒绝未知字段", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-manifest-"));
+  context.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  await writeFile(
+    path.join(root, "manifest.json"),
+    '{"schemaVersion":1,"workspace":{"name":"Demo"},"targets":{},"typo":true}\n',
+    "utf8",
+  );
+  await assert.rejects(() => readWorkspaceConfig(root), /不允许字段 typo/);
 });
 
 test("工作区清单声明普通独立仓库而不要求 Git submodule", async (context) => {
@@ -111,6 +181,32 @@ test("工作区清单声明普通独立仓库而不要求 Git submodule", async 
   ]);
   const status = await targetStatus(root);
   assert.equal(status[0].state, "missing");
+});
+
+test("多个 Target 不得映射到同一目录", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-target-path-"));
+  context.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  await writeFile(
+    path.join(root, "manifest.json"),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      workspace: { name: "Demo" },
+      targets: {
+        backend: {
+          path: "src/shared",
+          repository: "https://example.com/backend.git",
+        },
+        "frontend-web": {
+          path: "src/shared",
+          repository: "https://example.com/frontend.git",
+        },
+      },
+    })}\n`,
+    "utf8",
+  );
+  await assert.rejects(() => listTargets(root), /不能使用同一目录/);
 });
 
 test("模型字段校验接受逐字段标准矩阵", () => {
@@ -193,7 +289,52 @@ test("设计评审只有真实通过且无未关闭阻断问题时才允许交�
   );
   assert.equal(
     validateReviewDocument("| 评审状态 | 有条件通过 |\n\n## 条件与遗留项\n\n无。\n").ok,
+    false,
+  );
+  assert.equal(
+    validateReviewDocument(
+      "| 评审状态 | 有条件通过 |\n\n## 条件与遗留项\n\n上线前由后端负责人关闭 R-002。\n",
+    ).ok,
     true,
+  );
+  assert.equal(
+    validateReviewDocument(
+      "| 评审状态 | 通过 |\n| 流程与状态 | `design.md` | 待评审 | |\n",
+    ).ok,
+    false,
+  );
+});
+
+test("交付验证必须给出正向结论且不存在未执行项", () => {
+  assert.equal(
+    validateVerificationDocument(
+      "| 验证状态 | 待执行 |\n| 交付决定 | 待验收 |\n",
+    ).ok,
+    false,
+  );
+  assert.equal(
+    validateVerificationDocument(
+      "| 验证状态 | 通过 / 失败 / 未执行 |\n| 交付决定 | 通过 / 不通过 |\n",
+    ).ok,
+    false,
+  );
+  assert.equal(
+    validateVerificationDocument(
+      "| 验证状态 | 通过 |\n| 交付决定 | 通过 |\n",
+    ).ok,
+    true,
+  );
+  assert.equal(
+    validateVerificationDocument(
+      "| 验证状态 | 有条件通过 |\n| 交付决定 | 有条件通过 |\n\n## 失败、未执行与遗留风险\n\n无。\n",
+    ).ok,
+    false,
+  );
+  assert.equal(
+    validateVerificationDocument(
+      "| 验证状态 | 通过 |\n| 交付决定 | 通过 |\n| API | 未执行（环境不可用） | evidence |\n",
+    ).ok,
+    false,
   );
 });
 
@@ -215,8 +356,33 @@ test("Agent 适配可安装和刷新受管理 Skill", async (context) => {
   assert.equal(marker.managedBy, "PixCode");
 
   const states = await listHostAdapters(root);
-  assert.equal(states.find((state) => state.host === "codex").managed.length, 2);
+  const codex = states.find((state) => state.host === "codex");
+  assert.equal(codex.managed.length, 2);
+  assert.equal(codex.managed.every((skill) => skill.state === "current"), true);
+  await writeFile(
+    path.join(root, ".codex", "skills", "pixcode-workflow", "SKILL.md"),
+    "tampered\n",
+    "utf8",
+  );
+  const stale = await listHostAdapters(root);
+  assert.equal(
+    stale
+      .find((state) => state.host === "codex")
+      .managed.find((skill) => skill.skill === "pixcode-workflow").state,
+    "stale",
+  );
   await installHostAdapter(root, "codex", "0.1.0");
+  await rm(
+    path.join(root, ".codex", "skills", "pixcode-verify-delivery"),
+    { recursive: true },
+  );
+  const missing = await listHostAdapters(root);
+  assert.equal(
+    missing
+      .find((state) => state.host === "codex")
+      .managed.find((skill) => skill.skill === "pixcode-verify-delivery").state,
+    "missing-install",
+  );
 });
 
 test("Agent 适配不覆盖未受管理的同名 Skill", async (context) => {
@@ -316,9 +482,72 @@ test("pixcode init 从框架脚手架生成 OpenSpec 项目目录并保留项目
   const configPath = path.join(root, "openspec", "config.yaml");
   const projectConfig = `${await readFile(configPath, "utf8")}\n# 项目自定义配置保留\n`;
   await writeFile(configPath, projectConfig, "utf8");
+  await writeFile(
+    path.join(
+      root,
+      "openspec",
+      "schemas",
+      "pixcode-delivery",
+      "rogue.txt",
+    ),
+    "unexpected\n",
+    "utf8",
+  );
+  const config = JSON.parse(await readFile(path.join(testRoot, "pixcode.json"), "utf8"));
+  assert.equal(await scaffoldMatchesRuntime(root, config), false);
   const initializedAgain = await runCli(["init", "--agent", "none", "--json"], root);
   assert.equal(initializedAgain.code, 0, initializedAgain.stderr || initializedAgain.stdout);
   assert.equal(await readFile(configPath, "utf8"), projectConfig);
+  assert.equal(await scaffoldMatchesRuntime(root, config), true);
+});
+
+test("pixcode init 不覆盖同名但未受管理的 Schema", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-schema-"));
+  context.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  const config = JSON.parse(await readFile(path.join(testRoot, "pixcode.json"), "utf8"));
+  const target = path.join(
+    root,
+    "openspec",
+    "schemas",
+    config.defaultSchema,
+  );
+  await mkdir(target, { recursive: true });
+  await writeFile(path.join(target, "schema.yaml"), "user-owned: true\n", "utf8");
+
+  await assert.rejects(
+    () => installOpenSpecScaffold(root, config),
+    /不受 PixCode 管理/,
+  );
+  assert.equal(await readFile(path.join(target, "schema.yaml"), "utf8"), "user-owned: true\n");
+});
+
+test("Target bootstrap 拒绝接管已存在的错误目录", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-bootstrap-"));
+  context.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  await writeFile(
+    path.join(root, "manifest.json"),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      workspace: { name: "Demo" },
+      targets: {
+        backend: {
+          path: "src/backend",
+          repository: "https://example.com/backend.git",
+          defaultBranch: "main",
+        },
+      },
+    })}\n`,
+    "utf8",
+  );
+  await mkdir(path.join(root, "src", "backend"), { recursive: true });
+  await assert.rejects(
+    () => bootstrapTargets(root),
+    /不会接管或覆盖/,
+  );
 });
 
 test("当前态功能资产支持多级中文路径并保留 OpenSpec 映射", async (context) => {
@@ -394,6 +623,52 @@ capabilities:
     await exists(path.join(root, "pix-specs", "供应管理", "README.md")),
     true,
   );
+
+  const secondArchiveName = "2026-08-01-move-supply-general-approval";
+  const secondArchive = path.join(
+    root,
+    "openspec",
+    "changes",
+    "archive",
+    secondArchiveName,
+  );
+  await mkdir(secondArchive, { recursive: true });
+  await writeFile(
+    path.join(secondArchive, "pixcode.yaml"),
+    `schema_version: 1
+capabilities:
+  - id: supply-general-approval
+    name: 通用审核
+    action: update
+    publication_path: [物资管理系统, 通用审核]
+    assets: [requirements]
+`,
+    "utf8",
+  );
+  const relocation = await prepareCapabilityPublication(
+    root,
+    config,
+    secondArchiveName,
+  );
+  const relocatedDirectory = path.join(root, "pix-specs", "物资管理系统", "通用审核");
+  assert.equal(relocation.plans[0].relocationPending, true);
+  assert.equal(relocation.plans[0].directory, capabilityDirectory);
+  assert.equal(await exists(capabilityDirectory), true);
+  assert.equal(await exists(relocatedDirectory), false);
+  for (const fileName of ["README.md", "010-需求基线.md"]) {
+    const filePath = path.join(capabilityDirectory, fileName);
+    await writeFile(
+      filePath,
+      `${await readFile(filePath, "utf8")}\n最近更新 Change：\`move-supply-general-approval\`\n`,
+      "utf8",
+    );
+  }
+  const moved = await finalizeCapabilityPublication(root, config, secondArchiveName);
+  assert.equal(moved.finalized[0].revision, 2);
+  assert.equal(await exists(capabilityDirectory), false);
+  assert.equal(await exists(relocatedDirectory), true);
+  assert.equal(await exists(path.join(root, "pix-specs", "供应管理")), false);
+
   const validation = await validateCapabilities(root, config);
   assert.equal(validation.ok, true, validation.errors.join("；"));
 });

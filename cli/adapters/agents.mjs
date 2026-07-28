@@ -11,6 +11,7 @@ export const HOSTS = {
 };
 
 const MARKER = ".pixcode-managed.json";
+const HOST_MARKER = ".pixcode-adapter.json";
 
 async function listFiles(folder, prefix = "") {
   const entries = await readdir(folder, { withFileTypes: true });
@@ -27,9 +28,10 @@ async function listFiles(folder, prefix = "") {
   return files;
 }
 
-async function sourceHash(folder) {
+async function sourceHash(folder, ignoredFiles = new Set()) {
   const hash = createHash("sha256");
   for (const relative of await listFiles(folder)) {
+    if (ignoredFiles.has(relative.replaceAll("\\", "/"))) continue;
     hash.update(relative.replaceAll("\\", "/"));
     hash.update(await readFile(path.join(folder, relative)));
   }
@@ -81,14 +83,42 @@ export async function installHostAdapter(root, host, frameworkVersion) {
     await writeFile(path.join(target, MARKER), `${JSON.stringify(marker, null, 2)}\n`, "utf8");
     installed.push({ skill: skillName, target });
   }
+  const skillRoot = path.join(root, HOSTS[host], "skills");
+  await writeFile(
+    path.join(skillRoot, HOST_MARKER),
+    `${JSON.stringify(
+      {
+        managedBy: "PixCode",
+        frameworkVersion,
+        skills: sourceSkills,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
   return { host, installed };
 }
 
 export async function listHostAdapters(root) {
+  const sourceRoot = path.join(frameworkAssetsRoot, "skills");
   const result = [];
   for (const [host, directory] of Object.entries(HOSTS)) {
     const skillRoot = path.join(root, directory, "skills");
     const managed = [];
+    let expectedSkills = [];
+    const hostMarkerPath = path.join(skillRoot, HOST_MARKER);
+    if (await exists(hostMarkerPath)) {
+      try {
+        const hostMarker = JSON.parse(await readFile(hostMarkerPath, "utf8"));
+        if (hostMarker.managedBy !== "PixCode" || !Array.isArray(hostMarker.skills)) {
+          throw new Error("invalid marker");
+        }
+        expectedSkills = hostMarker.skills;
+      } catch {
+        managed.push({ skill: "<adapter>", state: "invalid-marker" });
+      }
+    }
     if (await exists(skillRoot)) {
       for (const entry of await readdir(skillRoot, { withFileTypes: true })) {
         if (
@@ -96,9 +126,46 @@ export async function listHostAdapters(root) {
           entry.name.startsWith("pixcode-") &&
           (await exists(path.join(skillRoot, entry.name, MARKER)))
         ) {
-          const marker = JSON.parse(await readFile(path.join(skillRoot, entry.name, MARKER), "utf8"));
-          managed.push({ skill: entry.name, sourceHash: marker.sourceHash });
+          const installedDirectory = path.join(skillRoot, entry.name);
+          const markerPath = path.join(installedDirectory, MARKER);
+          let marker;
+          try {
+            marker = JSON.parse(await readFile(markerPath, "utf8"));
+          } catch {
+            managed.push({ skill: entry.name, state: "invalid-marker" });
+            continue;
+          }
+          const sourceDirectory = path.join(sourceRoot, entry.name);
+          const currentSourceHash = (await exists(sourceDirectory))
+            ? await sourceHash(sourceDirectory)
+            : null;
+          const installedHash = await sourceHash(
+            installedDirectory,
+            new Set([MARKER]),
+          );
+          const state =
+            marker.managedBy === "PixCode" &&
+            marker.sourceHash &&
+            marker.sourceHash === currentSourceHash &&
+            marker.sourceHash === installedHash
+              ? "current"
+              : currentSourceHash
+                ? "stale"
+                : "missing-source";
+          managed.push({
+            skill: entry.name,
+            state,
+            sourceHash: marker.sourceHash,
+            currentSourceHash,
+            installedHash,
+          });
         }
+      }
+    }
+    const installedNames = new Set(managed.map((skill) => skill.skill));
+    for (const skill of expectedSkills) {
+      if (!installedNames.has(skill)) {
+        managed.push({ skill, state: "missing-install" });
       }
     }
     result.push({

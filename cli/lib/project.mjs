@@ -1,6 +1,7 @@
-import { access, readFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { frameworkAssetsRoot } from "./runtime.mjs";
+import { validateWorkspaceManifest } from "./manifest.mjs";
 
 export async function exists(filePath) {
   try {
@@ -44,14 +45,105 @@ export async function readWorkspaceConfig(root) {
       targets: {},
     };
   }
-  const config = JSON.parse(await readFile(filePath, "utf8"));
-  if (config.schemaVersion !== 1) {
-    throw new Error(`不支持的 manifest.json schemaVersion：${config.schemaVersion}`);
+  let config;
+  try {
+    config = JSON.parse(await readFile(filePath, "utf8"));
+  } catch (error) {
+    throw new Error(`manifest.json 不是有效 JSON：${error.message}`);
   }
-  if (!config.targets || typeof config.targets !== "object" || Array.isArray(config.targets)) {
-    config.targets = {};
+  const validation = await validateWorkspaceManifest(config);
+  if (!validation.ok) {
+    throw new Error(`manifest.json 校验失败：${validation.errors.join("；")}`);
   }
   return config;
+}
+
+async function ensureWorkspacePackage(root) {
+  const packagePath = path.join(root, "package.json");
+  if (await exists(packagePath)) {
+    return { path: packagePath, created: false };
+  }
+  const packageManifest = {
+    name: "pixcode-workspace",
+    private: true,
+    type: "module",
+    scripts: {
+      pixcode: "node .pixcode/cli/pixcode.mjs",
+      "pixcode:init": "npm run --silent pixcode -- init --agent codex",
+      "targets:bootstrap": "npm run --silent pixcode -- targets bootstrap",
+      "targets:status": "npm run --silent pixcode -- targets status",
+    },
+  };
+  await writeFile(
+    packagePath,
+    `${JSON.stringify(packageManifest, null, 2)}\n`,
+    "utf8",
+  );
+  return { path: packagePath, created: true };
+}
+
+async function ensureWorkspaceGitignore(root) {
+  const gitignorePath = path.join(root, ".gitignore");
+  if (await exists(gitignorePath)) {
+    return { path: gitignorePath, created: false };
+  }
+  const content = `# PixCode Target 是普通独立仓库，不进入工作区仓库。
+/src/*/
+
+# PixCode 依赖由 .pixcode 子模块持有。
+/node_modules/
+
+# Agent 宿主适配是可刷新副本。
+/.codex/skills/pixcode-*/
+/.claude/skills/pixcode-*/
+/.opencode/skills/pixcode-*/
+/.codex/skills/.pixcode-adapter.json
+/.claude/skills/.pixcode-adapter.json
+/.opencode/skills/.pixcode-adapter.json
+
+# 运行产物。
+**/__pycache__/
+*.py[cod]
+*.log
+.DS_Store
+Thumbs.db
+`;
+  await writeFile(gitignorePath, content, "utf8");
+  return { path: gitignorePath, created: true };
+}
+
+export async function initializeWorkspace(root, name) {
+  const filePath = path.join(root, "manifest.json");
+  if (await exists(filePath)) {
+    const manifest = await readWorkspaceConfig(root);
+    await mkdir(path.join(root, "src"), { recursive: true });
+    return {
+      created: false,
+      path: filePath,
+      manifest,
+      package: await ensureWorkspacePackage(root),
+      gitignore: await ensureWorkspaceGitignore(root),
+    };
+  }
+  const workspaceName = name?.trim();
+  if (!workspaceName) {
+    throw new Error("初始化工作区必须通过 --name 指定稳定名称。");
+  }
+  const manifest = {
+    $schema: "./.pixcode/schemas/workspace-manifest.schema.json",
+    schemaVersion: 1,
+    workspace: { name: workspaceName },
+    targets: {},
+  };
+  await writeFile(filePath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  await mkdir(path.join(root, "src"), { recursive: true });
+  return {
+    created: true,
+    path: filePath,
+    manifest,
+    package: await ensureWorkspacePackage(root),
+    gitignore: await ensureWorkspaceGitignore(root),
+  };
 }
 
 export function assertChangeId(changeId) {
@@ -70,15 +162,17 @@ export function parseFlags(args) {
       continue;
     }
     const key = value.slice(2);
-    if (["agent"].includes(key)) {
+    if (["agent", "name"].includes(key)) {
       const next = args[index + 1];
       if (!next || next.startsWith("--")) {
         throw new Error(`--${key} 需要一个值。`);
       }
       flags[key] = next;
       index += 1;
-    } else {
+    } else if (["json", "all"].includes(key)) {
       flags[key] = true;
+    } else {
+      throw new Error(`未知参数：--${key}`);
     }
   }
   return { positional, flags };

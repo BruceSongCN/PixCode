@@ -3,7 +3,9 @@ import {
   readFile,
   readdir,
   rename,
+  rmdir,
   stat,
+  unlink,
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
@@ -24,6 +26,11 @@ function assertInside(root, target, label) {
   if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error(`${label} 必须位于 ${root} 内部且不能等于其根目录。`);
   }
+}
+
+function isNestedPath(parent, child) {
+  const relative = path.relative(parent, child);
+  return Boolean(relative && !relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
 function publicationRoot(root, config) {
@@ -99,6 +106,16 @@ export async function validateCapabilityPublicationMap(root, config, changeDirec
       throw new Error(`Capability ${item.id} 尚不存在，不能使用 update。`);
     }
     const desired = path.resolve(publicationRoot(root, config), ...item.publication_path);
+    if (
+      existing &&
+      path.resolve(existing.directory) !== desired &&
+      (isNestedPath(existing.directory, desired) ||
+        isNestedPath(desired, existing.directory))
+    ) {
+      throw new Error(
+        `Capability ${item.id} 不能移动到自身子目录或祖先目录：${desired}`,
+      );
+    }
     const normalized = desired.toLocaleLowerCase("zh-CN");
     if (desiredPaths.has(normalized)) {
       throw new Error(
@@ -217,6 +234,7 @@ async function resolveArchive(root, archiveName) {
 
 export async function prepareCapabilityPublication(root, config, archiveName) {
   const archive = await resolveArchive(root, archiveName);
+  await validateCapabilityPublicationMap(root, config, archive);
   const { directory: templates, manifest } = await readTemplateManifest(root, config);
   const validAssets = new Set(Object.keys(manifest.assets));
   const mapping = await readPublicationMap(archive, validAssets);
@@ -237,14 +255,16 @@ export async function prepareCapabilityPublication(root, config, archiveName) {
     if (item.action === "update" && !existing) {
       throw new Error(`Capability ${item.id} 尚不存在，不能使用 update。`);
     }
-    if (existing && path.resolve(existing.directory) !== path.resolve(desiredDirectory)) {
+    const relocationPending =
+      Boolean(existing) &&
+      path.resolve(existing.directory) !== path.resolve(desiredDirectory);
+    if (relocationPending) {
       if (await exists(desiredDirectory)) {
         throw new Error(`Capability ${item.id} 的新目录已存在：${desiredDirectory}`);
       }
-      await mkdir(path.dirname(desiredDirectory), { recursive: true });
-      await rename(existing.directory, desiredDirectory);
     }
-    await mkdir(desiredDirectory, { recursive: true });
+    const workingDirectory = existing?.directory ?? desiredDirectory;
+    await mkdir(workingDirectory, { recursive: true });
     const revision = (existing?.metadata?.publication?.revision ?? 0) + 1;
     const values = {
       capability_id: item.id,
@@ -260,7 +280,7 @@ export async function prepareCapabilityPublication(root, config, archiveName) {
     const created = [];
     const retained = [];
     for (const fileName of ["README.md", ...Object.values(manifest.assets)]) {
-      const target = path.join(desiredDirectory, fileName);
+      const target = path.join(workingDirectory, fileName);
       if (await exists(target)) {
         retained.push(fileName);
         continue;
@@ -287,7 +307,9 @@ export async function prepareCapabilityPublication(root, config, archiveName) {
       name: item.name,
       action: item.action,
       assets: item.assets,
-      directory: desiredDirectory,
+      directory: workingDirectory,
+      desiredDirectory,
+      relocationPending,
       created,
       retained,
       sources: {
@@ -367,14 +389,30 @@ export async function finalizeCapabilityPublication(root, config, archiveName) {
   const byId = new Map(current.map((item) => [item.metadata.capability.id, item]));
   const changeId = archiveName.replace(/^\d{4}-\d{2}-\d{2}-/, "");
   const archivedAt = parseArchiveDate(archiveName);
-  const finalized = [];
+  const operations = [];
 
   for (const item of mapping.value.capabilities) {
-    const directory = path.join(outputRoot, ...item.publication_path);
-    assertInside(outputRoot, directory, `Capability ${item.id} 发布目录`);
-    await validatePublishedDocuments(directory, item, manifest, changeId);
-    const existing = byId.get(item.id)?.metadata;
-    const relativeArchive = toPosix(path.relative(directory, archive));
+    const desiredDirectory = path.join(outputRoot, ...item.publication_path);
+    assertInside(outputRoot, desiredDirectory, `Capability ${item.id} 发布目录`);
+    const currentCapability = byId.get(item.id);
+    const replayingCurrentChange = currentCapability?.metadata?.source_changes?.some(
+      (entry) => entry.change === changeId,
+    );
+    if (item.action === "create" && currentCapability && !replayingCurrentChange) {
+      throw new Error(`Capability ${item.id} 已存在，不能再次使用 create。`);
+    }
+    if (item.action === "update" && !currentCapability) {
+      throw new Error(`Capability ${item.id} 尚不存在，不能使用 update。`);
+    }
+    const workingDirectory = currentCapability?.directory ?? desiredDirectory;
+    const relocationPending =
+      path.resolve(workingDirectory) !== path.resolve(desiredDirectory);
+    if (relocationPending && (await exists(desiredDirectory))) {
+      throw new Error(`Capability ${item.id} 的新目录已存在：${desiredDirectory}`);
+    }
+    await validatePublishedDocuments(workingDirectory, item, manifest, changeId);
+    const existing = currentCapability?.metadata;
+    const relativeArchive = toPosix(path.relative(desiredDirectory, archive));
     const specPath = path.join(root, "openspec", "specs", item.id, "spec.md");
     if (!(await exists(specPath))) {
       throw new Error(`OpenSpec 当前 Spec 不存在，无法完成映射：${specPath}`);
@@ -385,7 +423,9 @@ export async function finalizeCapabilityPublication(root, config, archiveName) {
       .filter((entry) => entry.change !== changeId)
       .map((entry) => ({
         ...entry,
-        archive_link: toPosix(path.relative(directory, path.join(root, entry.archive))),
+        archive_link: toPosix(
+          path.relative(desiredDirectory, path.join(root, entry.archive)),
+        ),
       }));
     sourceChanges.push({
       change: changeId,
@@ -407,7 +447,7 @@ export async function finalizeCapabilityPublication(root, config, archiveName) {
       openspec: {
         spec_id: item.id,
         spec_path: toPosix(path.relative(root, specPath)),
-        spec_link: toPosix(path.relative(directory, specPath)),
+        spec_link: toPosix(path.relative(desiredDirectory, specPath)),
         latest_change: changeId,
         latest_archive: toPosix(path.relative(root, archive)),
       },
@@ -421,9 +461,36 @@ export async function finalizeCapabilityPublication(root, config, archiveName) {
       },
       source_changes: sourceChanges,
     };
-    await writeFile(path.join(directory, "capability.yaml"), renderCapabilityYaml(metadata), "utf8");
-    await writeFile(path.join(directory, manifest.generated.traceability), traceabilityDocument(metadata), "utf8");
-    finalized.push({ id: item.id, directory, revision: metadata.publication.revision });
+    operations.push({
+      id: item.id,
+      workingDirectory,
+      desiredDirectory,
+      relocationPending,
+      metadata,
+    });
+  }
+
+  const finalized = [];
+  for (const operation of operations) {
+    if (operation.relocationPending) {
+      await mkdir(path.dirname(operation.desiredDirectory), { recursive: true });
+      await rename(operation.workingDirectory, operation.desiredDirectory);
+    }
+    await writeFile(
+      path.join(operation.desiredDirectory, "capability.yaml"),
+      renderCapabilityYaml(operation.metadata),
+      "utf8",
+    );
+    await writeFile(
+      path.join(operation.desiredDirectory, manifest.generated.traceability),
+      traceabilityDocument(operation.metadata),
+      "utf8",
+    );
+    finalized.push({
+      id: operation.id,
+      directory: operation.desiredDirectory,
+      revision: operation.metadata.publication.revision,
+    });
   }
   const indexes = await rebuildCapabilityIndexes(root, config);
   return { archive: archiveName, finalized, indexes };
@@ -479,6 +546,35 @@ export async function rebuildCapabilityIndexes(root, config) {
     const filePath = path.join(directory, "README.md");
     await writeFile(filePath, capabilityIndexDocument(directory, relevant, title), "utf8");
     written.push(filePath);
+  }
+
+  const staleIndexes = [];
+  async function findStaleIndexes(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await findStaleIndexes(target);
+      } else if (
+        entry.isFile() &&
+        entry.name === "README.md" &&
+        !indexDirectories.has(directory) &&
+        (await readFile(target, "utf8")).includes(
+          "本索引由 PixCode 根据各功能目录中的 `capability.yaml` 自动重建",
+        )
+      ) {
+        staleIndexes.push(target);
+      }
+    }
+  }
+  await findStaleIndexes(outputRoot);
+  for (const filePath of staleIndexes) {
+    await unlink(filePath);
+    let directory = path.dirname(filePath);
+    while (directory !== outputRoot) {
+      if ((await readdir(directory)).length > 0) break;
+      await rmdir(directory);
+      directory = path.dirname(directory);
+    }
   }
   return written;
 }

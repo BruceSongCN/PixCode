@@ -37,7 +37,7 @@ npm run --silent pixcode -- capabilities finalize <archive>
 npm run --silent pixcode -- capabilities validate
 ```
 
-命令不可用时先提示执行 `npm ci`，不要调用全局 OpenSpec，也不要临时复制上游 Skill。
+命令不可用时先提示业务项目执行 `npm ci --prefix .pixcode`（框架仓库自身开发执行 `npm ci`），不要调用全局 OpenSpec，也不要临时复制上游 Skill。
 
 ## 3. 执行动作
 
@@ -88,10 +88,10 @@ npm run --silent pixcode -- capabilities validate
    - 不把最后一轮过程文档机械覆盖当前结论；
    - 删除 ADDED/MODIFIED、“本轮”和“待实现”等过程表达；
    - 无法判断合并关系时停止并请求决定。
-6. 执行 `capabilities finalize <archive>`，让 CLI 校验完整性、写入 `capability.yaml`、生成 `090-变更追溯.md` 并重建多级索引。
+6. 执行 `capabilities finalize <archive>`，让 CLI 先校验全部资产，再按新的 `publication_path` 执行必要的目录搬迁，写入 `capability.yaml`、生成 `090-变更追溯.md` 并重建多级索引。`prepare` 阶段不得人工提前移动既有目录。
 7. 执行 `capabilities validate` 和全局 `validate --all`。
 
-默认不得绕过未完成任务、缺失验证或严格校验失败；只有用户明确接受例外时才传 `--yes`。OpenSpec 已归档但语义合并中断时，使用 `capabilities prepare <archive>` 恢复，不重复归档。
+不得绕过未完成任务、未通过的设计评审、缺失或未通过的交付验证以及严格校验失败。OpenSpec 已归档但语义合并中断时，使用 `capabilities prepare <archive>` 恢复，不重复归档。
 
 ## 4. 保持 PixCode 边界
 

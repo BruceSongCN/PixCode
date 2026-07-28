@@ -28,7 +28,12 @@ export async function installOpenSpecScaffold(root, config) {
   }
 
   const existingMarker = path.join(targetSchema, ".pixcode-managed.json");
-  if (await exists(existingMarker)) {
+  if (await exists(targetSchema)) {
+    if (!(await exists(existingMarker))) {
+      throw new Error(
+        `默认 Schema 已存在但不受 PixCode 管理，拒绝覆盖：${targetSchema}。请先人工迁移或移走该目录。`,
+      );
+    }
     const marker = JSON.parse(await readFile(existingMarker, "utf8"));
     if (marker.managedBy !== "PixCode") {
       throw new Error(`拒绝刷新不受 PixCode 管理的 Schema：${targetSchema}`);
@@ -93,18 +98,41 @@ export async function scaffoldMatchesRuntime(root, config) {
     config.defaultSchema,
   );
   if (!(await exists(sourceSchema)) || !(await exists(targetSchema))) return false;
-  async function compare(source, target) {
-    for (const entry of await readdir(source, { withFileTypes: true })) {
+  const markerPath = path.join(targetSchema, ".pixcode-managed.json");
+  if (!(await exists(markerPath))) return false;
+  try {
+    const marker = JSON.parse(await readFile(markerPath, "utf8"));
+    if (
+      marker.managedBy !== "PixCode" ||
+      marker.frameworkVersion !== config.frameworkVersion
+    ) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+  async function compare(source, target, rootLevel = false) {
+    const sourceEntries = await readdir(source, { withFileTypes: true });
+    const targetEntries = (await readdir(target, { withFileTypes: true })).filter(
+      (entry) => !(rootLevel && entry.name === ".pixcode-managed.json"),
+    );
+    const sourceNames = sourceEntries
+      .map((entry) => `${entry.isDirectory() ? "d" : "f"}:${entry.name}`)
+      .sort();
+    const targetNames = targetEntries
+      .map((entry) => `${entry.isDirectory() ? "d" : "f"}:${entry.name}`)
+      .sort();
+    if (JSON.stringify(sourceNames) !== JSON.stringify(targetNames)) return false;
+    for (const entry of sourceEntries) {
       const sourcePath = path.join(source, entry.name);
       const targetPath = path.join(target, entry.name);
-      if (!(await exists(targetPath))) return false;
       if (entry.isDirectory()) {
-        if (!(await compare(sourcePath, targetPath))) return false;
+        if (!(await compare(sourcePath, targetPath, false))) return false;
       } else if ((await readFile(sourcePath, "utf8")) !== (await readFile(targetPath, "utf8"))) {
         return false;
       }
     }
     return true;
   }
-  return compare(sourceSchema, targetSchema);
+  return compare(sourceSchema, targetSchema, true);
 }

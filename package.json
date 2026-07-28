@@ -1,13 +1,19 @@
 {
   "name": "pixcode-framework",
-  "version": "0.6.0",
+  "version": "0.7.0",
+  "description": "轻量、Agent 中立、集成 OpenSpec 的 AI 编程工程驱动框架",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=20.20.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BruceSongCN/PixCode.git"
+  },
   "dependencies": {
     "@fission-ai/openspec": "1.6.0",
+    "ajv": "8.20.0",
     "yaml": "2.9.0"
   },
   "scripts": {

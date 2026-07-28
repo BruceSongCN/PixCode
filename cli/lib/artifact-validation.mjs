@@ -33,6 +33,13 @@ function section(content, heading) {
   return next >= 0 ? rest.slice(0, next) : rest;
 }
 
+function meaningfulSection(content, heading) {
+  const value = section(content, heading)
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .trim();
+  return Boolean(value && !/^无[。.]?$/.test(value) && !/<[^>]+>/.test(value));
+}
+
 function declaredEntities(content) {
   const modelChanges = section(content, "模型变化");
   const names = [];
@@ -138,14 +145,67 @@ export function validateReviewDocument(content, label = "review") {
   if (!["通过", "有条件通过"].includes(status)) {
     errors.push(`设计评审尚未通过（当前：${status || "未填写"}）`);
   }
-  if (
-    /^\|[^|\r\n]*\|\s*阻断\s*\|[^|\r\n]*\|[^|\r\n]*\|[^|\r\n]*\|\s*待处理\s*\|/m.test(
-      content,
-    )
-  ) {
-    errors.push("设计评审仍有未关闭的阻断问题");
+  for (const line of content.split(/\r?\n/)) {
+    const cells = splitRow(line);
+    if (cells.some((cell) => /^(待评审|不通过)$/.test(cell))) {
+      errors.push(`设计评审仍有未完成或不通过的明细：${line.trim()}`);
+    }
+    if (
+      cells.some((cell) => /(?:^|\s\/\s)阻断(?:\s\/\s|$)/.test(cell)) &&
+      cells.some((cell) => /^(待处理|未关闭)$/.test(cell))
+    ) {
+      errors.push("设计评审仍有未关闭的阻断问题");
+    }
   }
-  return { ok: errors.length === 0, label, status, errors };
+  if (status === "有条件通过" && !meaningfulSection(content, "条件与遗留项")) {
+    errors.push("有条件通过必须在“条件与遗留项”中记录条件、责任人和关闭方式。");
+  }
+  return { ok: errors.length === 0, label, status, errors: [...new Set(errors)] };
+}
+
+export function validateVerificationDocument(content, label = "verification") {
+  const validationStatus =
+    content.match(/^\|\s*验证状态\s*\|\s*([^|]+)\|/m)?.[1]?.trim() ?? null;
+  const deliveryDecision =
+    content.match(/^\|\s*交付决定\s*\|\s*([^|]+)\|/m)?.[1]?.trim() ?? null;
+  const accepted = new Set(["通过", "有条件通过"]);
+  const errors = [];
+
+  if (!accepted.has(validationStatus)) {
+    errors.push(`验证尚未通过（当前：${validationStatus || "未填写"}）`);
+  }
+  if (!accepted.has(deliveryDecision)) {
+    errors.push(`交付决定尚未通过（当前：${deliveryDecision || "未填写"}）`);
+  }
+
+  for (const line of content.split(/\r?\n/)) {
+    const cells = splitRow(line);
+    if (
+      cells.some(
+        (cell) =>
+          /^(失败|不通过|未执行|未验收)$/.test(cell) ||
+          /^(失败|不通过|未执行|未验收)(?:[\s（(:：/]|$)/.test(cell) ||
+          /(?:^|\s\/\s)(失败|不通过|未执行|未验收)(?:\s\/\s|$)/.test(cell),
+      )
+    ) {
+      errors.push(`验证结果仍含失败、未执行或未验收项：${line.trim()}`);
+    }
+  }
+
+  if (
+    [validationStatus, deliveryDecision].includes("有条件通过") &&
+    !meaningfulSection(content, "失败、未执行与遗留风险")
+  ) {
+    errors.push("有条件通过必须在“失败、未执行与遗留风险”中记录条件和处置。");
+  }
+
+  return {
+    ok: errors.length === 0,
+    label,
+    validationStatus,
+    deliveryDecision,
+    errors: [...new Set(errors)],
+  };
 }
 
 export async function validateModelArtifacts(root, config, target) {

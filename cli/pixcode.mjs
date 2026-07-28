@@ -8,6 +8,7 @@ import { doctor, validateSkills } from "./lib/checks.mjs";
 import {
   validateModelArtifacts,
   validateReviewDocument,
+  validateVerificationDocument,
 } from "./lib/artifact-validation.mjs";
 import {
   finalizeCapabilityPublication,
@@ -22,6 +23,7 @@ import {
   assertChangeId,
   exists,
   findProjectRoot,
+  initializeWorkspace,
   parseFlags,
   readPixCodeConfig,
 } from "./lib/project.mjs";
@@ -29,12 +31,13 @@ import {
 const HELP = `PixCode 轻量 AI 工程驱动器
 
 用法：
+  pixcode workspace init --name <workspace-name> [--json]
   pixcode init [--agent codex|claude|opencode|none]
   pixcode doctor [--json]
   pixcode validate [change|--all] [--json]
   pixcode change create <change-id> [--json]
   pixcode status [change] [--json]
-  pixcode archive <change> [--yes] [--json]
+  pixcode archive <change> [--json]
   pixcode capabilities prepare <archive> [--json]
   pixcode capabilities finalize <archive> [--json]
   pixcode capabilities reindex [--json]
@@ -55,6 +58,19 @@ function output(value, json = false) {
     if (value) console.log(value);
   } else {
     console.log(JSON.stringify(value, null, 2));
+  }
+}
+
+function assertInvocation(label, positional, flags, options = {}) {
+  const minimum = options.minimum ?? 0;
+  const maximum = options.maximum ?? minimum;
+  if (positional.length < minimum || positional.length > maximum) {
+    throw new Error(`${label} 的位置参数数量不正确。`);
+  }
+  const allowedFlags = new Set(options.flags ?? ["json"]);
+  const unexpected = Object.keys(flags).filter((flag) => !allowedFlags.has(flag));
+  if (unexpected.length) {
+    throw new Error(`${label} 不支持参数：${unexpected.map((flag) => `--${flag}`).join("、")}`);
   }
 }
 
@@ -181,11 +197,13 @@ async function archive(root, config, change, flags) {
   }
   if (!verificationPath) {
     blockers.push("当前 Schema 定义的 verification 资产尚未生成");
-  } else if (/结论[\s\S]{0,80}不通过/.test(await readFile(verificationPath, "utf8"))) {
-    blockers.push("verification 资产的结论为不通过");
+  } else {
+    blockers.push(
+      ...validateVerificationDocument(await readFile(verificationPath, "utf8")).errors,
+    );
   }
-  if (blockers.length && !flags.yes) {
-    throw new Error(`归档前检查未通过：${blockers.join("；")}。确认例外时显式传入 --yes。`);
+  if (blockers.length) {
+    throw new Error(`归档前检查未通过：${blockers.join("；")}。`);
   }
 
   const validation = await runOpenSpec(["validate", change, "--strict"], {
@@ -242,12 +260,24 @@ export async function main(argv = process.argv.slice(2)) {
     return;
   }
 
-  const root = await findProjectRoot();
-  const config = await readPixCodeConfig();
   const command = argv[0];
   const { positional, flags } = parseFlags(argv.slice(1));
+  if (command === "workspace" && positional[0] === "init") {
+    assertInvocation("workspace init", positional, flags, {
+      minimum: 1,
+      maximum: 1,
+      flags: ["name", "json"],
+    });
+    const result = await initializeWorkspace(process.cwd(), flags.name);
+    output(result, Boolean(flags.json));
+    return;
+  }
+
+  const root = await findProjectRoot();
+  const config = await readPixCodeConfig();
 
   if (command === "doctor") {
+    assertInvocation("doctor", positional, flags);
     const report = await doctor(root, config);
     if (flags.json) output(report, true);
     else {
@@ -259,14 +289,25 @@ export async function main(argv = process.argv.slice(2)) {
     return;
   }
   if (command === "validate") {
+    assertInvocation("validate", positional, flags, {
+      maximum: 1,
+      flags: ["all", "json"],
+    });
+    if (positional.length && flags.all) {
+      throw new Error("validate 不能同时指定 Change 和 --all。");
+    }
     await validate(root, config, positional, flags);
     return;
   }
   if (command === "init") {
+    assertInvocation("init", positional, flags, {
+      flags: ["agent", "json"],
+    });
     await init(root, config, flags);
     return;
   }
   if (command === "status") {
+    assertInvocation("status", positional, flags, { maximum: 1 });
     const change = positional[0];
     if (change) assertChangeId(change);
     const args = change ? ["status", "--change", change] : ["list"];
@@ -278,6 +319,10 @@ export async function main(argv = process.argv.slice(2)) {
     return;
   }
   if (command === "change" && positional[0] === "create") {
+    assertInvocation("change create", positional, flags, {
+      minimum: 2,
+      maximum: 2,
+    });
     const change = positional[1];
     assertChangeId(change);
     if (await exists(path.join(root, "openspec", "changes", change))) {
@@ -292,12 +337,20 @@ export async function main(argv = process.argv.slice(2)) {
     return;
   }
   if (command === "archive") {
+    assertInvocation("archive", positional, flags, {
+      minimum: 1,
+      maximum: 1,
+    });
     await archive(root, config, positional[0], flags);
     return;
   }
   if (command === "capabilities") {
     const action = positional[0];
     if (action === "prepare") {
+      assertInvocation("capabilities prepare", positional, flags, {
+        minimum: 2,
+        maximum: 2,
+      });
       output(
         await prepareCapabilityPublication(root, config, positional[1]),
         Boolean(flags.json),
@@ -305,6 +358,10 @@ export async function main(argv = process.argv.slice(2)) {
       return;
     }
     if (action === "finalize") {
+      assertInvocation("capabilities finalize", positional, flags, {
+        minimum: 2,
+        maximum: 2,
+      });
       output(
         await finalizeCapabilityPublication(root, config, positional[1]),
         Boolean(flags.json),
@@ -312,6 +369,10 @@ export async function main(argv = process.argv.slice(2)) {
       return;
     }
     if (["reindex", "rebuild"].includes(action)) {
+      assertInvocation(`capabilities ${action}`, positional, flags, {
+        minimum: 1,
+        maximum: 1,
+      });
       output(
         { ok: true, indexes: await rebuildCapabilityIndexes(root, config) },
         Boolean(flags.json),
@@ -319,6 +380,10 @@ export async function main(argv = process.argv.slice(2)) {
       return;
     }
     if (action === "validate") {
+      assertInvocation("capabilities validate", positional, flags, {
+        minimum: 1,
+        maximum: 1,
+      });
       const result = await validateCapabilities(root, config);
       output(result, Boolean(flags.json));
       if (!result.ok) process.exitCode = 1;
@@ -328,10 +393,18 @@ export async function main(argv = process.argv.slice(2)) {
   if (command === "targets") {
     const action = positional[0];
     if (action === "list") {
+      assertInvocation("targets list", positional, flags, {
+        minimum: 1,
+        maximum: 1,
+      });
       output(await listTargets(root), Boolean(flags.json));
       return;
     }
     if (action === "status") {
+      assertInvocation("targets status", positional, flags, {
+        minimum: 1,
+        maximum: 1,
+      });
       const result = await targetStatus(root);
       output(result, Boolean(flags.json));
       if (result.some((target) => !["ready", "missing"].includes(target.state))) {
@@ -340,6 +413,10 @@ export async function main(argv = process.argv.slice(2)) {
       return;
     }
     if (action === "bootstrap") {
+      assertInvocation("targets bootstrap", positional, flags, {
+        minimum: 1,
+        maximum: 1,
+      });
       output(await bootstrapTargets(root), Boolean(flags.json));
       return;
     }
@@ -347,6 +424,10 @@ export async function main(argv = process.argv.slice(2)) {
   if (command === "adapters") {
     const action = positional[0];
     if (action === "install") {
+      assertInvocation("adapters install", positional, flags, {
+        minimum: 2,
+        maximum: 2,
+      });
       output(
         await installHostAdapter(root, positional[1], config.frameworkVersion),
         Boolean(flags.json),
@@ -354,10 +435,18 @@ export async function main(argv = process.argv.slice(2)) {
       return;
     }
     if (action === "refresh") {
+      assertInvocation("adapters refresh", positional, flags, {
+        minimum: 1,
+        maximum: 1,
+      });
       output(await refreshHostAdapters(root, config.frameworkVersion), Boolean(flags.json));
       return;
     }
     if (action === "list") {
+      assertInvocation("adapters list", positional, flags, {
+        minimum: 1,
+        maximum: 1,
+      });
       output(await listHostAdapters(root), Boolean(flags.json));
       return;
     }

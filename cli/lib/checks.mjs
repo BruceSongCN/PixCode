@@ -1,6 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { exists } from "./project.mjs";
+import { exists, readWorkspaceConfig } from "./project.mjs";
 import { resolveOpenSpec, runOpenSpec } from "../adapters/openspec.mjs";
 import { listHostAdapters } from "../adapters/agents.mjs";
 import { scaffoldMatchesRuntime } from "./scaffold.mjs";
@@ -81,11 +81,11 @@ export async function doctor(root, config) {
   }
 
   for (const [item, absolute, detail] of [
-    ["PixCode 配置", path.join(frameworkAssetsRoot, "pixcode.json"), "PixCode runtime"],
+    ["PixCode 配置", path.join(frameworkAssetsRoot, "pixcode.json"), "PixCode Submodule"],
     [
       "OpenSpec 初始化脚手架",
       path.join(frameworkAssetsRoot, "scaffolds", "openspec", "config.yaml"),
-      "PixCode runtime",
+      "PixCode Submodule",
     ],
     ["OpenSpec 配置", path.join(root, "openspec", "config.yaml"), "openspec/config.yaml"],
     [
@@ -101,22 +101,25 @@ export async function doctor(root, config) {
         config.publication?.template ?? "capability-baseline",
         "template.json",
       ),
-      "PixCode runtime",
+      "PixCode Submodule",
     ],
     ["Target 根目录", path.join(root, "src"), "src"],
   ]) {
     checks.push({ ok: await exists(absolute), item, detail });
   }
-  checks.push({
-    ok:
-      path.resolve(root) === path.resolve(frameworkRepositoryRoot) ||
-      (await exists(path.join(root, "manifest.json"))),
-    item: "工作区配置",
-    detail:
-      path.resolve(root) === path.resolve(frameworkRepositoryRoot)
-        ? "框架仓库开发模式"
-        : "manifest.json",
-  });
+  try {
+    const workspace = await readWorkspaceConfig(root);
+    checks.push({
+      ok: true,
+      item: "工作区配置",
+      detail:
+        path.resolve(root) === path.resolve(frameworkRepositoryRoot)
+          ? "框架仓库开发模式"
+          : `manifest.json（${workspace.workspace.name}）`,
+    });
+  } catch (error) {
+    checks.push({ ok: false, item: "工作区配置", detail: error.message });
+  }
   checks.push({
     ok: await scaffoldMatchesRuntime(root, config),
     item: "OpenSpec Schema 同步",
@@ -125,14 +128,21 @@ export async function doctor(root, config) {
 
   checks.push(...(await validateSkills(root)).map((check) => ({ ...check, item: `Skill ${check.item}` })));
   const adapters = await listHostAdapters(root);
+  const staleAdapters = adapters.flatMap((adapter) =>
+    adapter.managed
+      .filter((skill) => skill.state !== "current")
+      .map((skill) => `${adapter.host}/${skill.skill}:${skill.state}`),
+  );
   checks.push({
-    ok: true,
+    ok: staleAdapters.length === 0,
     item: "Agent 适配",
     detail:
-      adapters
-        .filter((adapter) => adapter.managed.length)
-        .map((adapter) => `${adapter.host}:${adapter.managed.length}`)
-        .join("，") || "尚未安装（可选）",
+      staleAdapters.length > 0
+        ? `需要刷新：${staleAdapters.join("，")}`
+        : adapters
+            .filter((adapter) => adapter.managed.length)
+            .map((adapter) => `${adapter.host}:${adapter.managed.length}`)
+            .join("，") || "尚未安装（可选）",
   });
 
   return { ok: checks.every((check) => check.ok), checks, adapters };

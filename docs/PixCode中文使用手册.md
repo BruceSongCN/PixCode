@@ -1,8 +1,8 @@
 # PixCode 中文使用手册
 
-> 当前版本：PixCode `0.4.0`
+> 当前版本：PixCode `0.7.0`
 > 内置引擎：OpenSpec `1.6.0`  
-> 更新日期：2026-07-27
+> 更新日期：2026-07-28
 
 先按本手册完成安装和项目初始化；准备交付业务功能时，再使用[功能交付示例：设备巡检任务](功能交付示例-设备巡检任务.md)完整走一遍工作流。
 
@@ -17,42 +17,37 @@ OpenSpec 作为 PixCode 的内部依赖，负责 change、delta spec、任务跟
 
 ## 2. 安装
 
-创建一个干净目录并克隆 PixCode：
+在业务仓库根目录把 PixCode 接为 Submodule：
 
 ```powershell
-New-Item -ItemType Directory C:\Work\PixCode-Workspace -Force
-Set-Location C:\Work\PixCode-Workspace
-git clone <PixCode仓库地址> <项目目录>
-Set-Location <项目目录>
+git init
+git submodule add https://github.com/BruceSongCN/PixCode.git .pixcode
+npm ci --prefix .pixcode
 ```
 
-确认这是干净副本：
+从空目录创建工作区身份、`src/`、安全的 `.gitignore` 和最小 npm 命令入口：
 
 ```powershell
-git status --short
-Test-Path package-lock.json
-Test-Path node_modules
+node .pixcode/cli/pixcode.mjs workspace init --name <workspace-name>
 ```
 
-预期 Git 工作区干净、锁文件存在且 `node_modules` 尚不存在。发行版不应携带框架开发者遗留的活动 change。
-
-按照锁文件安装并检查：
+然后检查框架版本：
 
 ```powershell
-npm ci
 npm run --silent pixcode -- version
 ```
 
-`npm ci` 严格按照 `package-lock.json` 安装项目本地依赖。PixCode 调用本项目 `node_modules` 中锁定版本的 OpenSpec，不读取全局 PATH。此时根目录可以还没有 `openspec/`；它将在下一步初始化时生成。
+`npm ci --prefix .pixcode` 严格按照 `.pixcode/package-lock.json` 安装框架自有依赖。PixCode 只调用 `.pixcode/node_modules` 中锁定版本的 OpenSpec，不读取全局 PATH，也不依赖宿主根目录恰好安装了什么包。此时可以还没有 `openspec/`；它将在下一步初始化时生成。
 
 最低 Node.js 版本为 `20.20.0`。`doctor` 会检查：
 
 - Node.js 版本；
-- 本地 OpenSpec 包、版本和可执行入口；
+- PixCode 自有 OpenSpec 包、版本和可执行入口；
 - `.pixcode`、OpenSpec 配置和默认 Schema；
+- `manifest.json` 的 JSON Schema 结构；
 - PixCode Skill 的基本结构；
 - `src/` Target 根目录；
-- 已安装的 Agent 宿主适配。
+- 已安装 Agent 宿主适配是否与框架源码一致。
 
 ## 3. 初始化和 Agent 适配
 
@@ -69,13 +64,13 @@ npm run --silent pixcode -- init --agent codex
 - `opencode`
 - `none`
 
-初始化是幂等的：已有 OpenSpec 配置不会被覆盖。完成后会执行环境诊断。
+初始化是幂等的：已有 OpenSpec 项目配置不会被覆盖；同名 Schema 只有带 PixCode 管理标记时才会刷新，用户自有目录会被拒绝覆盖。完成后会执行环境诊断。
 
 初始化完成后执行完整检查：
 
 ```powershell
 npm run --silent pixcode -- doctor
-npm test
+npm test --prefix .pixcode
 npm run --silent pixcode -- validate --all
 ```
 
@@ -333,19 +328,21 @@ npm run --silent pixcode -- archive warehouse-offline-inventory
 
 - `tasks.md` 不存在未勾选任务；
 - `review.md` 已真实通过且不存在未关闭阻断问题；
-- `verification.md` 已存在且结论不是“不通过”；
+- `verification.md` 的验证状态和交付决定均为“通过”或有明确条件的“有条件通过”，且明细中不存在失败、未执行或未验收项；
 - change 通过严格校验。
 - `pixcode.yaml` 的 Capability、中文路径和受影响资产有效。
 
 需求不可原地回退。若要撤销已生效需求，创建一个新的 change 描述反向业务变化。
 
-OpenSpec 归档成功后，命令会准备 `pix-specs/` 合并计划，但不会用脚本假装理解设计语义。`pixcode-workflow` 会读取当前 Spec、归档设计和已有结论，把本轮增量合并为当前完整状态，然后执行：
+OpenSpec 归档成功后，命令会准备 `pix-specs/` 合并计划，但不会用脚本假装理解设计语义。即使 `publication_path` 发生变化，`prepare` 也继续在既有正式目录中完成语义合并，不提前移动功能资产。`pixcode-workflow` 会读取当前 Spec、归档设计和已有结论，把本轮增量合并为当前完整状态，然后执行：
 
 ```powershell
 npm run --silent pixcode -- capabilities finalize <归档目录名>
 npm run --silent pixcode -- capabilities validate
 npm run --silent pixcode -- validate --all
 ```
+
+`finalize` 会先校验所有受影响资产；全部通过后才执行目录改名或移动、写入 `capability.yaml`、生成追溯并重建索引。
 
 如果 OpenSpec 已归档而功能规格发布中断，执行：
 
@@ -427,16 +424,20 @@ pix-specs/
 ## 8. CLI 参考
 
 ```text
+pixcode workspace init --name <workspace-name> [--json]
 pixcode init [--agent codex|claude|opencode|none]
 pixcode doctor [--json]
 pixcode validate [change|--all] [--json]
 pixcode change create <change-id> [--json]
 pixcode status [change] [--json]
-pixcode archive <change> [--yes] [--json]
+pixcode archive <change> [--json]
 pixcode capabilities prepare <archive> [--json]
 pixcode capabilities finalize <archive> [--json]
 pixcode capabilities reindex [--json]
 pixcode capabilities validate [--json]
+pixcode targets list [--json]
+pixcode targets status [--json]
+pixcode targets bootstrap [--json]
 pixcode adapters install <codex|claude|opencode>
 pixcode adapters refresh
 pixcode adapters list [--json]
@@ -448,27 +449,27 @@ pixcode adapters list [--json]
 npm run --silent pixcode -- <命令>
 ```
 
-`--json` 用于 Agent 或脚本读取结构化结果。`archive --yes` 只允许用户明确接受未完成任务或缺失验证的例外，不能绕过严格结构校验。
+`--json` 用于 Agent 或脚本读取结构化结果。未知参数会直接报错。归档门禁不可通过参数绕过：任务、设计评审和交付验证必须形成明确的正向结论；需求回退应创建新的 Change。
 
 ## 9. 开发与升级
 
 运行框架测试：
 
 ```powershell
-npm test
+npm test --prefix .pixcode
 npm run --silent pixcode -- doctor
 npm run --silent pixcode -- validate --all
 ```
 
 升级内部 OpenSpec 或默认过程 Schema 时同时修改：
 
-1. `package.json` 中的精确版本；
+1. `.pixcode/package.json` 中的精确版本；
 2. `.pixcode/pixcode.json` 中的期望版本；
-3. `package-lock.json`；
+3. `.pixcode/package-lock.json`；
 4. `.pixcode/scaffolds/openspec/`；
-5. 本手册的版本说明。
+5. 本手册和 `CHANGELOG.md` 的版本说明。
 
-升级后必须执行 CLI 测试、Schema 校验和至少一次 change 冒烟流程。当前脚本分发阶段不提供 `pixcode update`，框架源码通过 Git 更新，依赖通过 `npm ci` 复现。
+升级后必须执行 CLI 测试、Schema 校验和至少一次 change 冒烟流程。当前脚本分发阶段不提供 `pixcode update`，框架源码通过 Git Submodule 更新，依赖通过 `npm ci --prefix .pixcode` 复现。
 
 ## 10. 常见问题
 
@@ -477,7 +478,7 @@ npm run --silent pixcode -- validate --all
 在项目根目录执行：
 
 ```powershell
-npm ci
+npm ci --prefix .pixcode
 ```
 
 不要用全局安装规避版本检查。

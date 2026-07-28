@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
+import { frameworkRepositoryRoot } from "../lib/runtime.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -10,15 +11,26 @@ export async function resolveOpenSpec(expectedVersion) {
   try {
     entry = require.resolve("@fission-ai/openspec");
   } catch {
-    throw new Error("未安装项目本地 OpenSpec。请在项目根目录执行 npm ci（首次可执行 npm install）。");
+    throw new Error("未安装 PixCode 锁定的 OpenSpec。请执行 npm ci --prefix .pixcode。");
   }
 
   const packageRoot = path.resolve(path.dirname(entry), "..");
+  const dependencyRoot = path.join(frameworkRepositoryRoot, "node_modules");
+  const relativeDependency = path.relative(dependencyRoot, packageRoot);
+  if (
+    !relativeDependency ||
+    relativeDependency.startsWith("..") ||
+    path.isAbsolute(relativeDependency)
+  ) {
+    throw new Error(
+      `OpenSpec 未从 PixCode 自有依赖目录解析：${packageRoot}。请执行 npm ci --prefix .pixcode。`,
+    );
+  }
   const packageJsonPath = path.join(packageRoot, "package.json");
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
   if (expectedVersion && packageJson.version !== expectedVersion) {
     throw new Error(
-      `OpenSpec 版本不匹配：期望 ${expectedVersion}，实际 ${packageJson.version}。请执行 npm ci。`,
+      `OpenSpec 版本不匹配：期望 ${expectedVersion}，实际 ${packageJson.version}。请执行 npm ci --prefix .pixcode。`,
     );
   }
 

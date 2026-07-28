@@ -31,14 +31,18 @@ PixCode 框架仓库只提供 `scaffolds/openspec/` 中的初始化源，不携�
 
 ## 快速开始
 
-克隆后安装锁定依赖并检查环境：
+在空业务仓库中接入 PixCode、安装锁定依赖并创建工作区：
 
 ```powershell
-npm ci
+git submodule add https://github.com/BruceSongCN/PixCode.git .pixcode
+npm ci --prefix .pixcode
+node .pixcode/cli/pixcode.mjs workspace init --name <workspace-name>
 npm run --silent pixcode -- init --agent codex
 npm run --silent pixcode -- doctor
 npm run --silent pixcode -- validate --all
 ```
+
+`workspace init` 只创建缺失的 `manifest.json`、`src/`、安全的 `.gitignore` 和最小 `package.json` 入口；已有文件会被保留并校验。OpenSpec、YAML 和 JSON Schema 校验器均由 `.pixcode/package-lock.json` 锁定，宿主根目录不重复声明这些运行依赖。
 
 如果初始化时使用了 `--agent none`，可以随后为当前 Agent 宿主安装 PixCode Skill：
 

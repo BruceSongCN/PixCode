@@ -24,7 +24,7 @@ PixCode（`Pi × Code`）是一套集成 OpenSpec 的轻量 AI 编程工程框�
 
 未安装命令别名时，直接读取 `skills/` 下对应 `SKILL.md`。默认 Schema 为 `pixcode-delivery`。不得另建平行的 Feature/Change 状态机、编号系统、门禁清单或基线合并协议。
 
-所有确定性 PixCode 操作使用项目本地入口 `npm run --silent pixcode -- <command>`。不得依赖全局 `openspec` 命令；缺少依赖时提示执行 `npm ci`。`skills/` 是唯一 Skill 源，宿主适配副本通过 `pixcode adapters install|refresh` 生成。
+所有确定性 PixCode 操作使用项目本地入口 `npm run --silent pixcode -- <command>`。作为 `.pixcode` Submodule 使用时，缺少依赖应提示执行 `npm ci --prefix .pixcode`；在 PixCode 框架仓库自身开发时执行 `npm ci`。不得依赖全局 `openspec` 命令。`skills/` 是唯一 Skill 源，宿主适配副本通过 `pixcode adapters install|refresh` 生成。
 
 ## 按需读取
 
