@@ -82,16 +82,33 @@ async function ensureWorkspacePackage(root) {
   return { path: packagePath, created: true };
 }
 
-async function ensureWorkspaceGitignore(root) {
+export async function ensureWorkspaceGitignore(root) {
   const gitignorePath = path.join(root, ".gitignore");
   if (await exists(gitignorePath)) {
-    return { path: gitignorePath, created: false };
+    const content = await readFile(gitignorePath, "utf8");
+    const localConfigRule = "/workspace.local.json";
+    if (content.split(/\r?\n/).includes(localConfigRule)) {
+      return { path: gitignorePath, created: false, updated: false };
+    }
+    const separator = content.length > 0 && !content.endsWith("\n") ? "\n" : "";
+    await writeFile(
+      gitignorePath,
+      `${content}${separator}
+# PixCode 个人执行与调试配置，不进入共享仓库。
+${localConfigRule}
+`,
+      "utf8",
+    );
+    return { path: gitignorePath, created: false, updated: true };
   }
   const content = `# PixCode Target 是普通独立仓库，不进入工作区仓库。
 /src/*/
 
 # PixCode 依赖由 .pixcode 子模块持有。
 /node_modules/
+
+# PixCode 个人执行与调试配置，不进入共享仓库。
+/workspace.local.json
 
 # Agent 宿主适配是可刷新副本。
 /.codex/skills/pixcode-*/
@@ -109,7 +126,7 @@ async function ensureWorkspaceGitignore(root) {
 Thumbs.db
 `;
   await writeFile(gitignorePath, content, "utf8");
-  return { path: gitignorePath, created: true };
+  return { path: gitignorePath, created: true, updated: false };
 }
 
 export async function initializeWorkspace(root, name) {
@@ -162,7 +179,7 @@ export function parseFlags(args) {
       continue;
     }
     const key = value.slice(2);
-    if (["agent", "name"].includes(key)) {
+    if (["agent", "name", "mode"].includes(key)) {
       const next = args[index + 1];
       if (!next || next.startsWith("--")) {
         throw new Error(`--${key} 需要一个值。`);

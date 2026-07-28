@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/BruceSongCN/PixCode/schemas/workspace-local.schema.json",
+  "title": "PixCode 个人工作区配置",
+  "description": "声明当前开发者的本地或远程调试选择。该文件应保存为工作区根目录 workspace.local.json，并始终排除在 Git 之外。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "debug"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "用于编辑器补全和校验的 JSON Schema 相对路径。"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "description": "个人工作区配置格式版本。"
+    },
+    "debug": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "fallback"],
+      "properties": {
+        "mode": {
+          "enum": ["local", "remote"],
+          "description": "默认调试模式。local 在当前电脑执行；remote 使用下方远程环境。"
+        },
+        "fallback": {
+          "const": "disabled",
+          "description": "固定为 disabled。远程环境不可用时必须明确失败，禁止静默切换到本地执行。"
+        },
+        "remote": {
+          "$ref": "#/$defs/remote"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "remote"
+              }
+            },
+            "required": ["mode"]
+          },
+          "then": {
+            "properties": {
+              "remote": true
+            },
+            "required": ["remote"]
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "remote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transport",
+        "host",
+        "workspace",
+        "runtime",
+        "connectTimeoutSeconds"
+      ],
+      "properties": {
+        "transport": {
+          "const": "ssh",
+          "description": "当前支持 SSH 作为远程控制通道。"
+        },
+        "host": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "description": "SSH Host 别名、主机名或 IP。推荐使用 ~/.ssh/config 中的别名；不得填写密码、Token 或命令行参数。"
+        },
+        "workspace": {
+          "type": "string",
+          "pattern": "^/(?:[^\\u0000\\r\\n]+)$",
+          "description": "远程服务器上的工作区绝对路径，例如 /srv/smartconnect/workspaces/default。"
+        },
+        "runtime": {
+          "enum": ["docker-compose", "kubernetes"],
+          "description": "远程容器编排方式。日常单人调试推荐 docker-compose；兼容验证可使用 kubernetes。"
+        },
+        "connectTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60,
+          "description": "SSH 连通性检查超时秒数。"
+        }
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "frameworkVersion": "0.7.1",
+  "frameworkVersion": "0.7.2",
   "engine": {
     "package": "@fission-ai/openspec",
     "version": "1.6.0"

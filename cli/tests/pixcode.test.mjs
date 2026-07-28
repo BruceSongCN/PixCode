@@ -13,6 +13,12 @@ import {
   validateVerificationDocument,
 } from "../lib/artifact-validation.mjs";
 import {
+  readWorkspaceLocalConfig,
+  resolveDebugConfig,
+  setDebugMode,
+  validateWorkspaceLocalConfig,
+} from "../lib/debug-config.mjs";
+import {
   finalizeCapabilityPublication,
   prepareCapabilityPublication,
   readPublicationMap,
@@ -117,6 +123,10 @@ test("workspace init 可从空目录生成最小工作区", async (context) => {
   assert.deepEqual(manifest.targets, {});
   assert.equal(await exists(path.join(root, "src")), true);
   assert.match(await readFile(path.join(root, ".gitignore"), "utf8"), /\/src\/\*\//);
+  assert.match(
+    await readFile(path.join(root, ".gitignore"), "utf8"),
+    /\/workspace\.local\.json/,
+  );
   const packageManifest = JSON.parse(
     await readFile(path.join(root, "package.json"), "utf8"),
   );
@@ -131,6 +141,123 @@ test("workspace init 可从空目录生成最小工作区", async (context) => {
     JSON.parse(await readFile(path.join(root, "manifest.json"), "utf8")).workspace.name,
     "Demo Workspace",
   );
+});
+
+test("未创建个人配置时调试模式安全地默认为本地", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-debug-default-"));
+  context.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  assert.deepEqual(await resolveDebugConfig(root, { env: {} }), {
+    mode: "local",
+    source: "default",
+    fallback: "disabled",
+    localConfig: {
+      path: path.join(root, "workspace.local.json"),
+      exists: false,
+    },
+    remote: undefined,
+    ready: true,
+    error: undefined,
+  });
+});
+
+test("个人调试配置严格校验并支持 CLI、环境变量和文件优先级", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-debug-config-"));
+  context.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  const config = {
+    $schema: "./.pixcode/schemas/workspace-local.schema.json",
+    schemaVersion: 1,
+    debug: {
+      mode: "remote",
+      fallback: "disabled",
+      remote: {
+        transport: "ssh",
+        host: "smartconnect-dev",
+        workspace: "/srv/smartconnect/workspaces/default",
+        runtime: "docker-compose",
+        connectTimeoutSeconds: 3,
+      },
+    },
+  };
+  assert.equal((await validateWorkspaceLocalConfig(config)).ok, true);
+  assert.equal(
+    (
+      await validateWorkspaceLocalConfig({
+        ...config,
+        debug: { ...config.debug, password: "forbidden" },
+      })
+    ).ok,
+    false,
+  );
+  await writeFile(
+    path.join(root, "workspace.local.json"),
+    `${JSON.stringify(config, null, 2)}\n`,
+    "utf8",
+  );
+
+  assert.equal((await resolveDebugConfig(root, { env: {} })).source, "workspace.local.json");
+  assert.deepEqual(
+    {
+      mode: (await resolveDebugConfig(root, {
+        env: { PIXCODE_DEBUG_MODE: "local" },
+      })).mode,
+      source: (await resolveDebugConfig(root, {
+        env: { PIXCODE_DEBUG_MODE: "local" },
+      })).source,
+    },
+    { mode: "local", source: "environment" },
+  );
+  assert.deepEqual(
+    {
+      mode: (await resolveDebugConfig(root, {
+        cliMode: "remote",
+        env: { PIXCODE_DEBUG_MODE: "local" },
+      })).mode,
+      source: (await resolveDebugConfig(root, {
+        cliMode: "remote",
+        env: { PIXCODE_DEBUG_MODE: "local" },
+      })).source,
+    },
+    { mode: "remote", source: "cli" },
+  );
+});
+
+test("debug use 只写入被 Git 排除的个人配置", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-debug-use-"));
+  context.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  await assert.rejects(() => setDebugMode(root, "remote"), /先.*配置 debug\.remote/);
+
+  const result = await setDebugMode(root, "local");
+  assert.equal(result.mode, "local");
+  assert.equal((await readWorkspaceLocalConfig(root)).exists, true);
+  assert.match(
+    await readFile(path.join(root, ".gitignore"), "utf8"),
+    /\/workspace\.local\.json/,
+  );
+});
+
+test("debug status 对缺少连接参数的 remote 模式明确失败", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-debug-status-"));
+  context.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  await writeFile(
+    path.join(root, "manifest.json"),
+    '{"schemaVersion":1,"workspace":{"name":"Demo"},"targets":{}}\n',
+    "utf8",
+  );
+
+  const result = await runCli(["debug", "status", "--mode", "remote", "--json"], root);
+  assert.equal(result.code, 1);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.ready, false);
+  assert.match(output.error, /未提供 debug\.remote/);
 });
 
 test("工作区清单严格拒绝未知字段", async (context) => {

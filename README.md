@@ -10,6 +10,7 @@ PixCode 重点补充 OpenSpec 未覆盖的工程语境：
 - 将归档变更合并为支持中文多级目录的 `pix-specs` 当前态功能规格；
 - 多 Target、独立仓库与跨端协作规则；
 - 基于需求场景的真实验证和测试交接；
+- Git 忽略的个人本地/远程调试选择与环境诊断；
 - Codex、Claude Code、OpenCode 等 Agent 宿主的可刷新 Skill 适配。
 
 ## 目录
@@ -60,6 +61,8 @@ npm run --silent pixcode -- validate warehouse-offline-inventory
 npm run --silent pixcode -- archive warehouse-offline-inventory
 npm run --silent pixcode -- capabilities finalize <归档目录名>
 npm run --silent pixcode -- capabilities validate
+npm run --silent pixcode -- debug status
+npm run --silent pixcode -- debug doctor
 ```
 
 规格内容和当前态语义合并仍由 Agent 按 Skill、规则、Schema 和模板理解后生成；CLI 只承担初始化、状态、校验、归档、映射、索引和宿主适配等确定性工作，不用硬编码代替 Agent 的业务判断。

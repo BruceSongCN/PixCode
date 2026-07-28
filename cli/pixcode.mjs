@@ -6,6 +6,11 @@ import { installHostAdapter, listHostAdapters, refreshHostAdapters } from "./ada
 import { parseOpenSpecJson, runOpenSpec } from "./adapters/openspec.mjs";
 import { doctor, validateSkills } from "./lib/checks.mjs";
 import {
+  diagnoseDebugEnvironment,
+  resolveDebugConfig,
+  setDebugMode,
+} from "./lib/debug-config.mjs";
+import {
   validateModelArtifacts,
   validateReviewDocument,
   validateVerificationDocument,
@@ -45,6 +50,9 @@ const HELP = `PixCode 轻量 AI 工程驱动器
   pixcode targets list [--json]
   pixcode targets status [--json]
   pixcode targets bootstrap [--json]
+  pixcode debug status [--mode local|remote] [--json]
+  pixcode debug use <local|remote> [--json]
+  pixcode debug doctor [--mode local|remote] [--json]
   pixcode adapters install <codex|claude|opencode>
   pixcode adapters refresh
   pixcode adapters list [--json]
@@ -418,6 +426,50 @@ export async function main(argv = process.argv.slice(2)) {
         maximum: 1,
       });
       output(await bootstrapTargets(root), Boolean(flags.json));
+      return;
+    }
+  }
+  if (command === "debug") {
+    const action = positional[0];
+    if (action === "status") {
+      assertInvocation("debug status", positional, flags, {
+        minimum: 1,
+        maximum: 1,
+        flags: ["mode", "json"],
+      });
+      const result = await resolveDebugConfig(root, {
+        cliMode: flags.mode,
+        env: process.env,
+      });
+      output(result, Boolean(flags.json));
+      if (!result.ready) process.exitCode = 1;
+      return;
+    }
+    if (action === "use") {
+      assertInvocation("debug use", positional, flags, {
+        minimum: 2,
+        maximum: 2,
+      });
+      output(await setDebugMode(root, positional[1]), Boolean(flags.json));
+      return;
+    }
+    if (action === "doctor") {
+      assertInvocation("debug doctor", positional, flags, {
+        minimum: 1,
+        maximum: 1,
+        flags: ["mode", "json"],
+      });
+      const result = await diagnoseDebugEnvironment(root, {
+        cliMode: flags.mode,
+        env: process.env,
+      });
+      if (flags.json) output(result, true);
+      else {
+        for (const check of result.checks) {
+          console.log(`${check.ok ? "✓" : "✗"} ${check.item}: ${check.detail}`);
+        }
+      }
+      if (!result.ok) process.exitCode = 1;
       return;
     }
   }

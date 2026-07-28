@@ -1,6 +1,6 @@
 # PixCode 中文使用手册
 
-> 当前版本：PixCode `0.7.1`
+> 当前版本：PixCode `0.7.2`
 > 内置引擎：OpenSpec `1.6.0`  
 > 更新日期：2026-07-28
 
@@ -138,6 +138,39 @@ git -C src/frontend-web branch --show-current
 ```
 
 每个 `src/<target>/` 都是独立 Git 边界，分别维护分支、提交、构建和测试。只接入当前项目真实存在的 Target，不要为了套用示例虚构目录。
+
+### 3.4 个人本地与远程调试配置
+
+团队共享事实保存在 `manifest.json`；每位开发者的执行环境选择保存在根目录 `workspace.local.json`。后者必须由 Git 忽略，文件不存在时固定默认为 `local`。
+
+```json
+{
+  "$schema": "./.pixcode/schemas/workspace-local.schema.json",
+  "schemaVersion": 1,
+  "debug": {
+    "mode": "remote",
+    "fallback": "disabled",
+    "remote": {
+      "transport": "ssh",
+      "host": "project-dev",
+      "workspace": "/srv/project/workspaces/default",
+      "runtime": "docker-compose",
+      "connectTimeoutSeconds": 3
+    }
+  }
+}
+```
+
+连接身份、密钥、端口和实际 IP 优先放入个人 `~/.ssh/config`，`host` 只写 SSH 别名。配置不得包含密码或 Token。共享 `doctor`、`validate`、SPEC 和 CI 不读取该文件。
+
+```powershell
+npm run --silent pixcode -- debug status
+npm run --silent pixcode -- debug use local
+npm run --silent pixcode -- debug use remote
+npm run --silent pixcode -- debug doctor
+```
+
+优先级为 `--mode`、`PIXCODE_DEBUG_MODE`、`workspace.local.json`、默认 `local`。远程不可用时明确失败，不静默改为本地执行。
 
 ## 4. 什么时候使用 SPEC
 
@@ -438,6 +471,9 @@ pixcode capabilities validate [--json]
 pixcode targets list [--json]
 pixcode targets status [--json]
 pixcode targets bootstrap [--json]
+pixcode debug status [--mode local|remote] [--json]
+pixcode debug use <local|remote> [--json]
+pixcode debug doctor [--mode local|remote] [--json]
 pixcode adapters install <codex|claude|opencode>
 pixcode adapters refresh
 pixcode adapters list [--json]
