@@ -7,14 +7,15 @@ description: 依据 PixCode change 的需求、测试方案和 Target 边界执�
 
 ## 1. 锁定变更
 
-先执行：
+先从用户最新指令确定执行模式。用户明确指定 local/remote 时把 `--mode` 传入：
 
 ```powershell
 npm run --silent pixcode -- debug gate verify --json
+npm run --silent pixcode -- debug gate verify --mode local --json
 ```
 
-把返回的执行模式和目标环境作为本轮验证边界。门禁失败时停止；`remote` 模式不得改用本地服务形成通过证据。
-若门禁返回验证 Profile，必须使用其中声明的数据库隔离和项目命令。会写数据库但 Profile 未声明隔离生命周期时停止。
+把返回的执行模式和目标环境作为本轮验证边界。显式模式与个人 Profile 冲突时，门禁优先改用该模式的项目默认 Profile；项目未声明时才进入无 Profile 的安全模式，此时只使用 Target 可确定的检查，数据库写入还必须有用户明确授权和可恢复 fixture。门禁失败时停止；`remote` 模式不得改用本地服务形成通过证据。
+若门禁返回验证 Profile，必须使用其中声明的数据库隔离和通用环境命令。业务测试目录、服务清单和用例选择仍以当前 test-plan 为准。会写数据库但 Profile 未声明隔离生命周期时停止。
 
 使用用户指定的 change；未指定时运行以下命令，只在唯一活动 change 可确定时继续：
 
@@ -29,22 +30,27 @@ npm run --silent pixcode -- status "<change>" --json
 
 - 从 proposal 获取 Target，不使用框架预设名称。
 - 从 Requirement 和 Scenario 推导用例，不按历史目录机械查找测试资产。
-- 从 test-plan 获取环境、资源角色、数据特征和通过标准。
+- 从 test-plan 获取环境、资源角色、数据特征、功能测试资产路径、最小服务拓扑和通过标准；Profile 不提供具体业务套件。
 - 读取每个 Target 仓库最接近的规则、测试入口和现有自动化资产。
 - 将通用资源角色绑定到当前环境 Provider；缺少环境、数据或凭证时暂停对应测试并如实记录。
 
 ## 3. 执行验证
 
-按 `Unit → Integration → Deploy → Remote Smoke → Full Regression` 执行，性能测试仅在方案声明阈值或用户明确要求时追加。后一层不得替代前一层：
+按风险选择 `Code Inspection → Unit → Focused Integration → Runtime Smoke → Full Regression`，性能测试仅在方案声明阈值或用户明确要求时追加。后一层不得替代前一层：
 
+- Code Inspection 检查本轮差异、目标规则、公开契约、注释文档、生成物一致性、静态分析和明显安全问题，阻断项未关闭时停止；
 - Unit 覆盖业务规则和边界，不依赖服务或数据库；
-- Integration 在隔离数据库上覆盖仓储、事务、迁移和约束；
-- Deploy 只部署已通过前两层的产物；
-- Remote Smoke 先确认部署版本、健康状态、契约和关键路径；
+- Focused Integration 优先运行 Profile 的 `focused`，用最小可回滚闭环覆盖仓储、事务、迁移、软删除、唯一约束和清理结果；
+- Runtime Smoke 只启动验证当前风险所需的最少服务；remote 仅在测试方案要求时进入，并且只有实现产物自上次成功部署后变化才重新 Deploy；
+- API 变更在 Runtime Smoke 核对实际公开契约；动态 OpenAPI 必须检查字段说明和枚举信息；
 - 失败修复后只按 `case`、`tag` 或 `from-case` 重跑目标用例；
 - 目标用例全部通过后只做一次 Full Regression。
 
-不得操作生产或未经授权的共享环境。写数据库前执行 Profile 的 `provision` 或 `reset`，结束后验证 fixture 零残留；凭证不得写入证据。
+数据库 reset、Fixture 变化和测试脚本修复不代表应用产物变化，不得据此重建全部服务。迁移变化确实需要应用启动时，使用项目显式的重启入口，并只重启受影响服务。
+
+不适用层级写明依据，不为满足模板部署或启动 Scope 外系统。不得操作生产或未经授权的共享环境。写数据库前执行 Profile 的 `provision` 或 `reset`；用户授权 shared-instance 时使用唯一标识和可逆 fixture，结束后验证零残留。凭证不得写入证据。
+
+完整日志写入 evidence 或临时文件；对话中只读取退出码、摘要、失败断言和最内层异常。优先使用增量构建、`--no-build`、quiet 模式及测试筛选。
 
 `remote` 模式下：
 
@@ -70,9 +76,10 @@ openspec/changes/<change>/evidence/<target>/<run-id>/
 - 显式列出失败、未执行、阻断原因、影响和后续动作；
 - 在“执行环境声明”中记录 gate 输出、实际服务入口、部署标识/版本和契约或构建指纹；不适用项写明依据；
 - 记录每一验证层的命令、耗时和结果，区分定向重跑与最终完整回归；
+- Code Inspection 未执行或存在未关闭阻断项时，结论不得为“通过”；
 - 结论只使用“通过”“有条件通过”或“不通过”。
 
-最后运行：
+测试稳定后再一次性生成或更新 verification.md，最后运行：
 
 ```powershell
 npm run --silent pixcode -- validate "<change>"

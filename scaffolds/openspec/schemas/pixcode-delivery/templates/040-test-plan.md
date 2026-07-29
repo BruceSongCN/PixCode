@@ -10,7 +10,7 @@
 
 | Requirement / Scenario | 测试层级 | Target | 自动化 |
 | --- | --- | --- | --- |
-| `<引用>` | 单元 / API / 契约 / 集成 / E2E | `<target-id>` | 是 / 否 |
+| `<引用>` | 代码检查 / 单元 / API / 契约 / 集成 / E2E | `<target-id>` | 是 / 否 |
 
 ## 环境与拓扑
 
@@ -20,14 +20,32 @@
 | --- | --- | --- | --- |
 | `<profile>` | none / dedicated-container / shared-instance | provision / reset / status / destroy | 零残留 / <例外> |
 
+<!-- Profile 只描述通用环境。具体测试资产与服务拓扑必须由本轮 Change 显式声明。 -->
+
+| 测试资产路径 | 最小服务拓扑 | 执行环境 | 进入条件 |
+| --- | --- | --- | --- |
+| `<Target 内明确路径>` | `<仅列必需服务>` | local / remote | `<何时才需要远端或运行态验证>` |
+
+## 实现反馈环
+
+| 项目 | 内容 |
+| --- | --- |
+| 范围 / 非目标 | `<Target 和本轮实现>` / `<不做的授权、部署、联调或重构>` |
+| Quick 入口 | `<最快增量构建、静态检查或快速测试命令>` |
+| Focused 场景 | `<最小业务闭环：准备 → 操作 → 状态变化 → 撤销/清理 → 零残留>` |
+| 最少运行拓扑 | `<只列该场景必须启动的服务和替身>` |
+| 反馈预算 | `<首次结果分钟数；超过后的诊断动作>` |
+| 远端触发条件 | `<默认不进入；仅列兼容性、跨服务或最终交付需要>` |
+| 重新部署条件 | `<仅实现产物或运行配置变化；数据、用例和文档变化不部署>` |
+
 ## 验证阶梯与时间预算
 
 | 阶段 | 项目命令 | 进入条件 | 目标时长 | 失败后的动作 |
 | --- | --- | --- | --- | --- |
-| Unit | `<command>` | 实现完成 | `<分钟>` | 修复并重跑失败测试 |
-| Integration | `<command>` | Unit 通过、隔离库就绪 | `<分钟>` | 按 case/tag 定向重跑 |
-| Deploy | `<command>` | Integration 通过 | `<分钟>` | 修复部署问题后重做 Smoke |
-| Remote Smoke | `<command>` | 当前实现已部署 | `<分钟>` | 定向诊断，不启动完整回归 |
+| Code Inspection | `<command>` | 实现完成 | `<分钟>` | 修复全部阻断项 |
+| Unit | `<command>` | Code Inspection 通过 | `<分钟>` | 修复并重跑失败测试 |
+| Focused Integration | `<command>` | Unit 通过、fixture 就绪 | `<分钟>` | 查最内层异常并定向重跑 |
+| Runtime Smoke | `<command 或不适用>` | 存在运行态风险；remote 已部署 | `<分钟>` | 只重做必要 Smoke |
 | Full Regression | `<command>` | 定向失败全部关闭 | `<分钟>` | 记录失败并停止交付 |
 | Performance（可选） | `<command 或不适用>` | 已声明阈值 | `<分钟>` | 对照阈值给出结论 |
 
@@ -51,7 +69,7 @@
 
 <!-- 哪些必须自动化，哪些允许人工验证，以及原因。 -->
 
-<!-- 明确测试运行器的 case/tag/from-case 选择方式和最终完整回归入口。 -->
+<!-- 明确 quick/focused、case/tag/from-case 和最终完整回归入口；local 不默认要求 Deploy。 -->
 
 ## 通过标准与阻断条件
 

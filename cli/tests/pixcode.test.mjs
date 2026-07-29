@@ -308,7 +308,10 @@ test("debug gate 校验验证 Profile、执行模式和数据库隔离", async (
             reset: "./scripts/test-env.ps1 reset",
             status: "./scripts/test-env.ps1 status",
             destroy: "./scripts/test-env.ps1 destroy",
+            inspection: "npm run inspect",
+            quick: "npm test -- quick",
             unit: "npm test -- unit",
+            focused: "npm test -- focused",
             integration: "npm test -- integration",
             deploy: "npm run deploy",
             smoke: "npm test -- smoke",
@@ -342,6 +345,9 @@ test("debug gate 校验验证 Profile、执行模式和数据库隔离", async (
   assert.equal(gate.verification.name, "local-isolated");
   assert.equal(gate.verification.databaseIsolation, "dedicated-container");
   assert.equal(gate.verification.databasePort, 13360);
+  assert.equal(gate.verification.commands.inspection, "npm run inspect");
+  assert.equal(gate.verification.commands.quick, "npm test -- quick");
+  assert.equal(gate.verification.commands.focused, "npm test -- focused");
 
   manifest.verification.profiles["local-isolated"].debugMode = "remote";
   await writeFile(
@@ -354,6 +360,109 @@ test("debug gate 校验验证 Profile、执行模式和数据库隔离", async (
   assert.match(
     mismatch.checks.find((check) => check.item === "Profile 执行模式").detail,
     /要求 remote/,
+  );
+
+  const explicitLocal = await gateExecutionEnvironment(root, "verify", {
+    cliMode: "local",
+    env: {},
+  });
+  assert.equal(explicitLocal.ok, true);
+  assert.equal(explicitLocal.mode, "local");
+  assert.equal(explicitLocal.verification, undefined);
+  assert.match(
+    explicitLocal.checks.find((check) => check.item === "验证 Profile 覆盖").detail,
+    /本轮显式选择 local/,
+  );
+  assert.match(explicitLocal.requirements.join("\n"), /未绑定匹配的验证 Profile/);
+});
+
+test("执行模式使用各自默认 Profile，debug use 同步个人选择", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-mode-profiles-"));
+  context.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  const manifest = {
+    schemaVersion: 1,
+    workspace: { name: "Demo" },
+    targets: {},
+    verification: {
+      defaultProfiles: {
+        local: "local-fast",
+        remote: "remote-isolated",
+      },
+      profiles: {
+        "local-fast": {
+          debugMode: "local",
+          databaseIsolation: "none",
+          databaseWrites: false,
+          commands: {
+            inspection: "npm run inspect",
+            unit: "npm test -- unit",
+          },
+        },
+        "remote-isolated": {
+          debugMode: "remote",
+          databaseIsolation: "dedicated-container",
+          databaseWrites: true,
+          commands: {
+            provision: "./scripts/test-env.ps1 provision",
+            reset: "./scripts/test-env.ps1 reset",
+            status: "./scripts/test-env.ps1 status",
+            destroy: "./scripts/test-env.ps1 destroy",
+            inspection: "npm run inspect",
+            unit: "npm test -- unit",
+            integration: "npm test -- integration",
+          },
+        },
+      },
+    },
+  };
+  await writeFile(
+    path.join(root, "manifest.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf8",
+  );
+
+  const initial = await gateExecutionEnvironment(root, "apply", { env: {} });
+  assert.equal(initial.ok, true);
+  assert.equal(initial.mode, "local");
+  assert.equal(initial.verification.name, "local-fast");
+
+  await writeFile(
+    path.join(root, "workspace.local.json"),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        debug: {
+          mode: "local",
+          fallback: "disabled",
+          remote: {
+            transport: "ssh",
+            host: "demo-remote",
+            workspace: "/srv/demo",
+            runtime: "docker-compose",
+            connectTimeoutSeconds: 3,
+          },
+        },
+        verification: {
+          profile: "local-fast",
+          databasePort: 13360,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  await setDebugMode(root, "remote");
+  assert.equal(
+    (await readWorkspaceLocalConfig(root)).config.verification.profile,
+    "remote-isolated",
+  );
+  await setDebugMode(root, "local");
+  assert.equal(
+    (await readWorkspaceLocalConfig(root)).config.verification.profile,
+    "local-fast",
   );
 });
 
@@ -368,6 +477,52 @@ test("工作区清单严格拒绝未知字段", async (context) => {
     "utf8",
   );
   await assert.rejects(() => readWorkspaceConfig(root), /不允许字段 typo/);
+});
+
+test("验证 Profile 按能力要求最小命令集合", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pixcode-minimal-profile-"));
+  context.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  const manifest = {
+    schemaVersion: 1,
+    workspace: { name: "Demo" },
+    targets: {},
+    verification: {
+      defaultProfile: "local",
+      profiles: {
+        local: {
+          debugMode: "local",
+          databaseIsolation: "none",
+          databaseWrites: false,
+          commands: {
+            inspection: "npm run inspect",
+            unit: "npm test -- unit",
+            quick: "npm test -- quick",
+            focused: "npm test -- focused",
+          },
+        },
+      },
+    },
+  };
+  await writeFile(
+    path.join(root, "manifest.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf8",
+  );
+  assert.equal((await readWorkspaceConfig(root)).verification.profiles.local.debugMode, "local");
+
+  manifest.verification.profiles.local.databaseIsolation = "shared-instance";
+  manifest.verification.profiles.local.databaseWrites = true;
+  await writeFile(
+    path.join(root, "manifest.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf8",
+  );
+  await assert.rejects(
+    () => readWorkspaceConfig(root),
+    /integration|reset|status/,
+  );
 });
 
 test("工作区清单声明普通独立仓库而不要求 Git submodule", async (context) => {

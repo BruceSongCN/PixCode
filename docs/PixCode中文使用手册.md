@@ -172,11 +172,11 @@ npm run --silent pixcode -- debug gate apply
 npm run --silent pixcode -- debug gate verify
 ```
 
-优先级为 `--mode`、`PIXCODE_DEBUG_MODE`、`workspace.local.json`、默认 `local`。远程不可用时明确失败，不静默改为本地执行。
+优先级为 `--mode`、`PIXCODE_DEBUG_MODE`、`workspace.local.json`、默认 `local`。项目通过 `verification.defaultProfiles.local/remote` 为两种模式分别设置安全默认值，`debug use` 会同步个人 Profile。远程不可用时明确失败，不静默改为本地执行。临时模式覆盖与个人 Profile 冲突时，优先改用该模式的项目默认 Profile；不存在时才进入无 Profile 的安全模式。
 
 `status` 只解析配置，`doctor` 只做只读连通性和 Runtime 诊断；`gate apply|verify` 则把执行模式转换成实现或验证阶段的强制边界。`remote` 表示部署后的调试、迁移、集成和真实服务验证必须以配置的远端环境为准，本地程序连接远端数据库不等于远端调试。PixCode 不通用化项目部署命令，也不会自动取得远端写权限；部署入口应由项目规则声明，Agent 只能在用户授权范围内执行。缺少入口或授权时必须暂停，不得用本地结果声称远端完成。
 
-项目还可在 `manifest.json` 声明 `verification.profiles`，把验证模式、数据库隔离方式以及环境生命周期和分层测试命令作为共享事实；个人 `workspace.local.json` 只选择 Profile 和不含凭证的个人端口。门禁会拒绝 Profile 与调试模式不匹配，或“允许写数据库但未声明隔离”的配置。
+项目还可在 `manifest.json` 声明 `verification.profiles`，把验证模式、数据库隔离方式以及通用环境生命周期命令作为共享事实；个人 `workspace.local.json` 只选择 Profile 和不含凭证的个人端口。Profile 至少声明 `inspection`、`unit`，可声明实现期的 `quick`、`focused`。具体业务测试资产、服务拓扑、迁移断言和用例选择必须来自当前 test-plan，不得固化进全局 Profile。
 
 ## 4. 什么时候使用 SPEC
 
@@ -315,8 +315,11 @@ $pixcode-workflow apply warehouse-offline-inventory
 实现时：
 
 - 首先执行 `npm run --silent pixcode -- debug gate apply --json`；
+- 用户明确指定本地或远端时，将该模式传给门禁，不让个人默认配置覆盖本轮意图；
 - 读取 change 的全部规划资产；
-- 按 `tasks.md` 的依赖顺序推进；
+- 锁定本轮 Target、范围、非目标、数据库权限和外部写操作；
+- 先完成最小纵向切片，并立即运行 `quick`、`focused` 或 Target 的等价定向检查；
+- 测试与实现相邻推进，最后才执行完整回归和集中整理文档；
 - 分别进入 `src/<target>/` 独立仓库读取规则、检查状态、修改和验证；
 - 完成任务后勾选对应任务；
 - 不用代码猜测替代缺失的业务决定；
@@ -337,7 +340,9 @@ $pixcode-verify-delivery warehouse-offline-inventory
 - 环境、资源角色和数据特征绑定；
 - 命令、时间、退出码、关键输出与证据索引。
 
-默认执行阶梯为 `Unit → Integration → Deploy → Remote Smoke → Full Regression`，性能测试按需追加。失败修复后先使用项目测试运行器的 `case`、`tag` 或 `from-case` 定向重跑；目标失败全部关闭后只执行一次完整回归。写数据库的验证必须先通过 Profile 的 `provision/reset/status` 入口准备隔离环境，并在结束时核对 fixture 零残留。
+默认按风险执行 `Code Inspection → Unit → Focused Integration → Runtime Smoke → Full Regression`，性能测试按需追加。日常实现默认使用 local 快速反馈；remote 只在 test-plan 明确要求兼容性、跨服务或最终交付确认时进入。`Deploy` 不是每次测试的前置动作，同一实现产物已部署后，测试数据、用例和文档变化只做定向重跑。数据库 reset 默认不重建应用容器，迁移或启动配置变化时才显式重启受影响服务。
+
+写数据库的验证必须先取得用户对目标实例和写操作的明确授权，再通过 Profile 的 `provision/reset/status` 入口准备隔离环境；共享开发实例只允许使用唯一、可追踪、可逆的 fixture，结束时必须核对零残留。控制台仅保留阶段结论和最内层错误，完整日志写入证据文件；`verification.md` 在测试稳定后统一生成。
 
 验证首先执行 `npm run --silent pixcode -- debug gate verify --json`。remote 模式下必须命中远端真实服务，并在 `verification.md` 记录主机/工作区、实际入口、部署标识或版本、OpenAPI 或构建指纹；无法确认部署当前实现时不得判定通过。`pixcode validate` 会确定性检查正向结论是否完整声明这些执行环境事实。
 

@@ -59,12 +59,29 @@
     "verification": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["defaultProfile", "profiles"],
+      "required": ["profiles"],
       "properties": {
         "defaultProfile": {
           "type": "string",
           "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-          "description": "项目默认验证 Profile。"
+          "description": "兼容旧工作区的单一默认验证 Profile。新工作区应使用 defaultProfiles 按执行模式分别声明。"
+        },
+        "defaultProfiles": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["local"],
+          "properties": {
+            "local": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "未创建个人配置时使用的本地快速验证 Profile。"
+            },
+            "remote": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "开发者明确选择远端执行时使用的远端验证 Profile。"
+            }
+          }
         },
         "profiles": {
           "type": "object",
@@ -76,7 +93,17 @@
             "$ref": "#/$defs/verificationProfile"
           }
         }
-      }
+      },
+      "anyOf": [
+        {
+          "properties": { "defaultProfile": true },
+          "required": ["defaultProfile"]
+        },
+        {
+          "properties": { "defaultProfiles": true },
+          "required": ["defaultProfiles"]
+        }
+      ]
     }
   },
   "$defs": {
@@ -106,22 +133,26 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "provision",
-            "reset",
-            "status",
-            "destroy",
-            "unit",
-            "integration",
-            "deploy",
-            "smoke",
-            "regression"
+            "inspection",
+            "unit"
           ],
           "properties": {
             "provision": { "type": "string", "minLength": 1 },
             "reset": { "type": "string", "minLength": 1 },
             "status": { "type": "string", "minLength": 1 },
             "destroy": { "type": "string", "minLength": 1 },
+            "inspection": { "type": "string", "minLength": 1 },
+            "quick": {
+              "type": "string",
+              "minLength": 1,
+              "description": "实现阶段最快的确定性反馈入口，宜包含增量构建、静态检查或快速测试。"
+            },
             "unit": { "type": "string", "minLength": 1 },
+            "focused": {
+              "type": "string",
+              "minLength": 1,
+              "description": "最小可回滚业务闭环入口，宜支持 case、tag 或场景参数。"
+            },
             "integration": { "type": "string", "minLength": 1 },
             "deploy": { "type": "string", "minLength": 1 },
             "smoke": { "type": "string", "minLength": 1 },
@@ -129,7 +160,50 @@
             "performance": { "type": "string", "minLength": 1 }
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "databaseWrites": { "const": true }
+            },
+            "required": ["databaseWrites"]
+          },
+          "then": {
+            "properties": {
+              "commands": {
+                "type": "object",
+                "properties": {
+                  "reset": true,
+                  "status": true,
+                  "integration": true
+                },
+                "required": ["reset", "status", "integration"]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "databaseIsolation": { "const": "dedicated-container" }
+            },
+            "required": ["databaseIsolation"]
+          },
+          "then": {
+            "properties": {
+              "commands": {
+                "type": "object",
+                "properties": {
+                  "provision": true,
+                  "destroy": true
+                },
+                "required": ["provision", "destroy"]
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

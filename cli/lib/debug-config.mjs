@@ -115,6 +115,7 @@ export async function resolveDebugConfig(root, options = {}) {
 export async function setDebugMode(root, mode) {
   assertMode(mode, "调试模式");
   const local = await readWorkspaceLocalConfig(root);
+  const manifest = await readWorkspaceConfig(root);
   if (mode === "remote" && !local.config?.debug.remote) {
     throw new Error(
       "启用 remote 前，请先在 workspace.local.json 中配置 debug.remote；可参考远程调试手册。",
@@ -130,6 +131,20 @@ export async function setDebugMode(root, mode) {
   };
   config.debug.mode = mode;
   config.debug.fallback = "disabled";
+  const modeDefaultProfile = manifest.verification?.defaultProfiles?.[mode];
+  if (modeDefaultProfile) {
+    config.verification ??= {};
+    config.verification.profile = modeDefaultProfile;
+  } else if (config.verification?.profile) {
+    const selectedProfile =
+      manifest.verification?.profiles?.[config.verification.profile];
+    if (selectedProfile && selectedProfile.debugMode !== mode) {
+      delete config.verification.profile;
+      if (Object.keys(config.verification).length === 0) {
+        delete config.verification;
+      }
+    }
+  }
   await ensureWorkspaceGitignore(root);
   await writeFile(local.path, `${JSON.stringify(config, null, 2)}\n`, "utf8");
   return resolveDebugConfig(root);
@@ -175,9 +190,21 @@ export async function diagnoseDebugEnvironment(root, options = {}) {
   const resolved = await resolveDebugConfig(root, options);
   const manifest = await readWorkspaceConfig(root);
   const local = await readWorkspaceLocalConfig(root);
-  const profileName =
-    local.config?.verification?.profile ??
-    manifest.verification?.defaultProfile;
+  const explicitProfileName = local.config?.verification?.profile;
+  const explicitProfile = explicitProfileName
+    ? manifest.verification?.profiles?.[explicitProfileName]
+    : undefined;
+  const modeDefaultProfileName =
+    manifest.verification?.defaultProfiles?.[resolved.mode];
+  const profileOverridden =
+    (resolved.source === "cli" || resolved.source === "environment") &&
+    explicitProfile &&
+    explicitProfile.debugMode !== resolved.mode;
+  const profileName = profileOverridden
+    ? modeDefaultProfileName
+    : explicitProfileName ??
+      modeDefaultProfileName ??
+      manifest.verification?.defaultProfile;
   const profile = profileName
     ? manifest.verification?.profiles?.[profileName]
     : undefined;
@@ -193,6 +220,13 @@ export async function diagnoseDebugEnvironment(root, options = {}) {
       detail: "disabled（远程不可用时不静默改为本地执行）",
     },
   ];
+  if (profileOverridden) {
+    checks.push({
+      ok: true,
+      item: "验证 Profile 覆盖",
+      detail: `${explicitProfileName} 要求 ${explicitProfile.debugMode}；本轮显式选择 ${resolved.mode}，改用${modeDefaultProfileName ? ` ${modeDefaultProfileName}` : "无 Profile 的安全模式"}`,
+    });
+  }
   if (profileName) {
     checks.push({
       ok: Boolean(profile),
@@ -298,14 +332,28 @@ export async function gateExecutionEnvironment(root, phase, options = {}) {
         ]
       : [
           "交付验证必须命中已配置的远端环境及其真实服务；本地服务结果不能替代远端证据。",
-          "按 Unit → Integration → Deploy → Remote Smoke → Full Regression 的顺序执行；性能测试仅在明确需要时执行。",
+          "先完成 Code Inspection、Unit 和 Focused Integration；仅在 test-plan 声明运行态或跨服务风险时进入 Remote Smoke，且实现产物自上次部署后变化才重新 Deploy。",
+          "数据库 reset、Fixture、用例或文档变化不得触发应用重新部署；迁移需要重启时只处理受影响服务。",
           "失败修复后先用 case/tag/from-case 定向重跑，全部定向问题关闭后只执行一次完整回归。",
           "verification.md 必须记录执行模式、远端主机/工作区、实际服务地址、部署标识或版本以及可复核的契约或构建指纹。",
           "无法确认远端已部署当前实现时，相关场景必须标记为未执行或失败，不得判定通过。",
         ]
-    : [
-        `当前明确选择 local；${phase === "apply" ? "运行态实现检查" : "交付验证"}应在本机执行并记录实际入口。`,
-      ];
+    : phase === "apply"
+      ? [
+          "当前明确选择 local；实现、运行态检查和证据应在本机完成，不部署到远端。",
+          "开始修改前先锁定本轮 Target、范围、非目标和外部写操作；不得从已确认设计推导额外权限、部署或联调工作。",
+          "优先使用验证 Profile 或 Target 规则中的 quick/focused 等价入口完成最快反馈和最小可回滚业务闭环，再扩展实现范围。",
+        ]
+      : [
+          "当前明确选择 local；交付验证应命中本机实际入口，不部署到远端。",
+          "按 Code Inspection → Unit → Focused Integration → Local Smoke → Full Regression 的风险顺序执行；不适用层级说明依据。",
+          "失败修复后先定向重跑；测试稳定后再一次性整理 verification.md 和最终完整回归。",
+        ];
+  if (!diagnosis.config.verification) {
+    requirements.push(
+      "本轮未绑定匹配的验证 Profile；只可执行可从 Target 规则确定的本地检查。数据库写入必须已有用户明确授权，并使用可恢复 fixture 验证零残留。",
+    );
+  }
   return {
     ok: diagnosis.ok,
     phase,

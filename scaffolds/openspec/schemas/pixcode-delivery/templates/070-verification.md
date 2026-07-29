@@ -18,16 +18,21 @@
 | 实际服务入口 | `<URL 或不适用及依据>` |
 | 部署标识 / 版本 | `<镜像、提交、版本或不适用及依据>` |
 | 契约 / 构建指纹 | `<OpenAPI 哈希、构建哈希或其他可复核标识>` |
+| 数据准备 / 清理结果 | `<fixture 标识>` / `<零残留或已知残留>` |
 
 ## 执行摘要
 
 | 阶段 | Target / 范围 | 环境 | 命令或入口 | 耗时 | 结果 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- |
-| Unit / Integration / Deploy / Smoke / Regression / Performance | `<target-id>` | <环境> | `<command>` | `<时长>` | 通过 / 失败 / 未执行 | <相对路径或链接> |
+| Code Inspection / Unit / Focused Integration / Runtime Smoke / Regression / Performance | `<target-id>` | <环境> | `<command>` | `<时长>` | 通过 / 失败 / 不适用 | <相对路径或链接> |
 
 ## 定向重跑与完整回归
 
 <!-- 列出失败用例、case/tag/from-case 定向重跑结果，以及最后一次完整回归。不得用多次完整回归代替定位。 -->
+
+## 最小业务闭环
+
+<!-- 记录准备、操作、关键状态、撤销或清理及零残留断言。只记录真实执行结果。 -->
 
 ## Requirement 与 Scenario 覆盖
 
