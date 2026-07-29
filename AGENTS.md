@@ -32,6 +32,7 @@ PixCode（`Pi × Code`）是一套集成 OpenSpec 的轻量 AI 编程工程框�
 - 统一规格工作流：`skills/pixcode-workflow/SKILL.md`
 - 真实验证与证据：`skills/pixcode-verify-delivery/SKILL.md`
 - 任务分流与资产原则：`rules/直接任务与SPEC.md`
+- 自动生成代码的中文注释与提交门禁：`rules/代码注释与提交.md`
 - Change、Capability 与中文资产标题：`rules/OpenSpec资产命名.md`
 - 归档后的当前态功能规格：`rules/当前态功能规格.md`
 - 多仓库、多 Target 协作：`rules/多目标交付.md`
