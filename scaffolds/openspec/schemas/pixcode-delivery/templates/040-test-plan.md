@@ -10,7 +10,15 @@
 
 | Requirement / Scenario | 测试层级 | Target | 自动化 |
 | --- | --- | --- | --- |
-| `<引用>` | 代码检查 / 单元 / API / 契约 / 集成 / E2E | `<target-id>` | 是 / 否 |
+| `<引用>` | 代码检查 / 单元 / 组件集成 / API Smoke / 契约 / E2E | `<target-id>` | 是 / 否 |
+
+## 风险下沉设计
+
+| 风险 | 最低覆盖层 | 真实依赖 | Runtime 仅确认 |
+| --- | --- | --- | --- |
+| `<业务分支、错误码、回退或映射>` | Unit | 无 | 不重复业务组合 |
+| `<仓储、事务、并发、Seed、迁移或约束>` | Component Integration | 真实 DI / UnitOfWork / ORM / 隔离数据库 | HTTP 装配 |
+| `<路由、鉴权、序列化、进程配置或 OpenAPI>` | Runtime Smoke | 最少服务拓扑 | 对应装配风险 |
 
 ## 环境与拓扑
 
@@ -32,9 +40,13 @@
 | --- | --- |
 | 范围 / 非目标 | `<Target 和本轮实现>` / `<不做的授权、部署、联调或重构>` |
 | Quick 入口 | `<最快增量构建、静态检查或快速测试命令>` |
+| Component 入口 | `<不启动 HTTP，使用真实 DI / UnitOfWork / ORM 的定向命令>` |
 | Focused 场景 | `<最小业务闭环：准备 → 操作 → 状态变化 → 撤销/清理 → 零残留>` |
 | 最少运行拓扑 | `<只列该场景必须启动的服务和替身>` |
 | 反馈预算 | `<首次结果分钟数；超过后的诊断动作>` |
+| 构建复用 | `<首次构建命令、产物指纹、后续 no-build/no-restore 入口>` |
+| 数据库策略 | `<日常增量 Migration；何时允许一次完整历史重建>` |
+| 服务会话策略 | `<单次启动批量 Smoke；允许重启的条件>` |
 | 远端触发条件 | `<默认不进入；仅列兼容性、跨服务或最终交付需要>` |
 | 重新部署条件 | `<仅实现产物或运行配置变化；数据、用例和文档变化不部署>` |
 
@@ -44,8 +56,8 @@
 | --- | --- | --- | --- | --- |
 | Code Inspection | `<command>` | 实现完成 | `<分钟>` | 修复全部阻断项 |
 | Unit | `<command>` | Code Inspection 通过 | `<分钟>` | 修复并重跑失败测试 |
-| Focused Integration | `<command>` | Unit 通过、fixture 就绪 | `<分钟>` | 查最内层异常并定向重跑 |
-| Runtime Smoke | `<command 或不适用>` | 存在运行态风险；remote 已部署 | `<分钟>` | 只重做必要 Smoke |
+| Component Integration | `<component；兼容 focused>` | Unit 通过、fixture 就绪 | `<分钟>` | 补最低层回归并定向重跑 |
+| Runtime Smoke | `<command 或不适用>` | Component 通过；存在装配风险；remote 已部署 | `<分钟>` | 保持单次服务会话，只重做必要 Smoke |
 | Full Regression | `<command>` | 定向失败全部关闭 | `<分钟>` | 记录失败并停止交付 |
 | Performance（可选） | `<command 或不适用>` | 已声明阈值 | `<分钟>` | 对照阈值给出结论 |
 

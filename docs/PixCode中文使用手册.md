@@ -340,7 +340,11 @@ $pixcode-verify-delivery warehouse-offline-inventory
 - 环境、资源角色和数据特征绑定；
 - 命令、时间、退出码、关键输出与证据索引。
 
-默认按风险执行 `Code Inspection → Unit → Focused Integration → Runtime Smoke → Full Regression`，性能测试按需追加。日常实现默认使用 local 快速反馈；remote 只在 test-plan 明确要求兼容性、跨服务或最终交付确认时进入。`Deploy` 不是每次测试的前置动作，同一实现产物已部署后，测试数据、用例和文档变化只做定向重跑。数据库 reset 默认不重建应用容器，迁移或启动配置变化时才显式重启受影响服务。
+默认按风险执行 `Code Inspection → Unit → Component Integration → Runtime Smoke → Full Regression`，性能测试按需追加。Unit 承担业务分支、错误码、回退和映射的主要诊断；Component 使用真实 DI、UnitOfWork、ORM 和隔离数据库覆盖并发、事务、Seed、迁移及约束，但不启动 HTTP；Runtime Smoke 只确认路由、鉴权、序列化、进程配置和动态 OpenAPI，不作为业务调试主循环。
+
+一个稳定产物默认只构建一次，后续层级复用产物并使用 `--no-build` / `--no-restore` 等价入口。同一产物的 Runtime Smoke 只启动一次最少服务并批量执行；数据库日常反馈使用隔离库增量 Migration，完整历史迁移链只在迁移变化、专项升级验证或最终发布门禁时执行一次。Runtime 暴露业务或 ORM 缺陷时，先补到 Unit 或 Component 并使其通过，再定向重跑 Smoke。
+
+日常实现默认使用 local 快速反馈；remote 只在 test-plan 明确要求兼容性、跨服务或最终交付确认时进入。`Deploy` 不是每次测试的前置动作，同一实现产物已部署后，测试数据、用例和文档变化只做定向重跑。数据库 reset 默认不重建应用容器，迁移或启动配置变化时才显式重启受影响服务。
 
 写数据库的验证必须先取得用户对目标实例和写操作的明确授权，再通过 Profile 的 `provision/reset/status` 入口准备隔离环境；共享开发实例只允许使用唯一、可追踪、可逆的 fixture，结束时必须核对零残留。控制台仅保留阶段结论和最内层错误，完整日志写入证据文件；`verification.md` 在测试稳定后统一生成。
 

@@ -148,10 +148,15 @@
               "description": "实现阶段最快的确定性反馈入口，宜包含增量构建、静态检查或快速测试。"
             },
             "unit": { "type": "string", "minLength": 1 },
+            "component": {
+              "type": "string",
+              "minLength": 1,
+              "description": "不启动 HTTP，使用真实 DI、UnitOfWork、ORM 和获授权数据库的组件集成入口。"
+            },
             "focused": {
               "type": "string",
               "minLength": 1,
-              "description": "最小可回滚业务闭环入口，宜支持 case、tag 或场景参数。"
+              "description": "兼容既有项目的最小可回滚业务闭环入口，宜支持 case、tag 或场景参数。新项目优先声明 component。"
             },
             "integration": { "type": "string", "minLength": 1 },
             "deploy": { "type": "string", "minLength": 1 },
@@ -176,9 +181,20 @@
                 "properties": {
                   "reset": true,
                   "status": true,
+                  "component": true,
                   "integration": true
                 },
-                "required": ["reset", "status", "integration"]
+                "required": ["reset", "status"],
+                "anyOf": [
+                  {
+                    "properties": { "component": true },
+                    "required": ["component"]
+                  },
+                  {
+                    "properties": { "integration": true },
+                    "required": ["integration"]
+                  }
+                ]
               }
             }
           }

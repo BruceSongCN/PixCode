@@ -33,24 +33,31 @@ npm run --silent pixcode -- status "<change>" --json
 - 从 test-plan 获取环境、资源角色、数据特征、功能测试资产路径、最小服务拓扑和通过标准；Profile 不提供具体业务套件。
 - 读取每个 Target 仓库最接近的规则、测试入口和现有自动化资产。
 - 将通用资源角色绑定到当前环境 Provider；缺少环境、数据或凭证时暂停对应测试并如实记录。
+- 在执行前建立风险到最低测试层的映射：业务分支、错误码和回退优先落在 Unit；仓储、事务、ORM 并发、Seed、迁移和约束落在 Component；路由、鉴权、序列化、进程配置和动态 OpenAPI 才留给 Runtime Smoke。不得因为已有 Mock 断言就把真实基础设施风险推迟到 HTTP 接口诊断。
 
 ## 3. 执行验证
 
-按风险选择 `Code Inspection → Unit → Focused Integration → Runtime Smoke → Full Regression`，性能测试仅在方案声明阈值或用户明确要求时追加。后一层不得替代前一层：
+按风险选择 `Code Inspection → Unit → Component Integration → Runtime Smoke → Full Regression`，性能测试仅在方案声明阈值或用户明确要求时追加。后一层不得替代前一层：
 
 - Code Inspection 检查本轮差异、目标规则、公开契约、注释文档、生成物一致性、静态分析和明显安全问题，阻断项未关闭时停止；
-- Unit 覆盖业务规则和边界，不依赖服务或数据库；
-- Focused Integration 优先运行 Profile 的 `focused`，用最小可回滚闭环覆盖仓储、事务、迁移、软删除、唯一约束和清理结果；
-- Runtime Smoke 只启动验证当前风险所需的最少服务；remote 仅在测试方案要求时进入，并且只有实现产物自上次成功部署后变化才重新 Deploy；
+- Unit 覆盖业务规则、成功/失败分支、错误码、配置回退和上下文映射，不依赖服务或数据库；依赖 Mock 的测试必须说明尚未覆盖的 ORM、事务或容器行为；
+- Component Integration 优先运行 Profile 的 `component`，缺少时使用 `focused` 或项目声明的等价入口；使用真实 DI、UnitOfWork、ORM 和获授权数据库，但不启动 HTTP 服务，用最小可回滚闭环覆盖仓储、并发、Seed 顺序、迁移、软删除、唯一约束和清理结果；
+- Runtime Smoke 是装配确认而非业务调试入口，只验证路由、鉴权、序列化、进程配置和实际 OpenAPI；同一产物只启动一次最少服务并批量执行 Smoke。remote 仅在测试方案要求时进入，并且只有实现产物自上次成功部署后变化才重新 Deploy；
 - API 变更在 Runtime Smoke 核对实际公开契约；动态 OpenAPI 必须检查字段说明和枚举信息；
 - 失败修复后只按 `case`、`tag` 或 `from-case` 重跑目标用例；
 - 目标用例全部通过后只做一次 Full Regression。
 
-数据库 reset、Fixture 变化和测试脚本修复不代表应用产物变化，不得据此重建全部服务。迁移变化确实需要应用启动时，使用项目显式的重启入口，并只重启受影响服务。
+Runtime Smoke 的准入条件是当前变更涉及的 Unit 与 Component 套件全部通过；不能只凭一个最小 happy-path 用例进入接口测试。最终 Full Regression 仍用于检查 Scope 外既有功能是否被破坏，不把它提前成每次修复的反馈环。
+
+执行前记录构建产物指纹或时间戳。一个稳定验证周期最多做一次必要构建；构建成功后 Unit、Component 和 Runtime 默认复用同一产物并使用 `--no-build` / `--no-restore`。只有实现源码、生成代码或构建配置发生变化才失效并重建，测试数据、数据库 reset、测试脚本和交付文档变化不得触发应用重建。
+
+数据库日常反馈默认保留隔离库并增量应用 Migration；只有迁移本身变化、验证完整升级链或最终发布门禁明确要求时才从零重建，而且每个稳定产物最多执行一次。迁移变化确实需要应用启动时，使用项目显式的重启入口，并只重启受影响服务。
+
+Runtime Smoke 失败若暴露业务规则、ORM、事务、Seed 或并发问题，先在 Unit 或 Component 增加可复现回归并使其通过，再重跑单个 Smoke；禁止把反复启动服务当作主要诊断循环。首次服务会话已成功且产物未变化时复用该会话，不因 API 用例、fixture 或文档变化重启。
 
 不适用层级写明依据，不为满足模板部署或启动 Scope 外系统。不得操作生产或未经授权的共享环境。写数据库前执行 Profile 的 `provision` 或 `reset`；用户授权 shared-instance 时使用唯一标识和可逆 fixture，结束后验证零残留。凭证不得写入证据。
 
-完整日志写入 evidence 或临时文件；对话中只读取退出码、摘要、失败断言和最内层异常。优先使用增量构建、`--no-build`、quiet 模式及测试筛选。
+完整日志写入 evidence 或临时文件；对话中只读取退出码、摘要、失败断言和最内层异常。优先使用增量构建、`--no-build`、quiet 模式及测试筛选。实际累计耗时达到 test-plan 反馈预算时暂停新增高成本层级，汇报构建、迁移、启动和用例各自耗时，先消除重复工作再继续。
 
 `remote` 模式下：
 

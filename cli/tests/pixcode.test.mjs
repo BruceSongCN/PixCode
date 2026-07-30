@@ -311,6 +311,7 @@ test("debug gate 校验验证 Profile、执行模式和数据库隔离", async (
             inspection: "npm run inspect",
             quick: "npm test -- quick",
             unit: "npm test -- unit",
+            component: "npm test -- component",
             focused: "npm test -- focused",
             integration: "npm test -- integration",
             deploy: "npm run deploy",
@@ -347,6 +348,7 @@ test("debug gate 校验验证 Profile、执行模式和数据库隔离", async (
   assert.equal(gate.verification.databasePort, 13360);
   assert.equal(gate.verification.commands.inspection, "npm run inspect");
   assert.equal(gate.verification.commands.quick, "npm test -- quick");
+  assert.equal(gate.verification.commands.component, "npm test -- component");
   assert.equal(gate.verification.commands.focused, "npm test -- focused");
 
   manifest.verification.profiles["local-isolated"].debugMode = "remote";
@@ -522,6 +524,19 @@ test("验证 Profile 按能力要求最小命令集合", async (context) => {
   await assert.rejects(
     () => readWorkspaceConfig(root),
     /integration|reset|status/,
+  );
+
+  manifest.verification.profiles.local.commands.reset = "npm run db:reset";
+  manifest.verification.profiles.local.commands.status = "npm run db:status";
+  manifest.verification.profiles.local.commands.component = "npm test -- component";
+  await writeFile(
+    path.join(root, "manifest.json"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf8",
+  );
+  assert.equal(
+    (await readWorkspaceConfig(root)).verification.profiles.local.commands.component,
+    "npm test -- component",
   );
 });
 
